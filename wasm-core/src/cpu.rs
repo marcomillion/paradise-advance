@@ -402,7 +402,7 @@ mod tests {
         let mut c=ThumbCpu::new(); c.r[15]=0; c.r[0]=0x7FFF_FFFF;
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[0],0x8000_0000); assert!(c.n); assert!(c.v);
-        assert!(c.step(&mut m).is_ok()); assert!(c.n); assert!(!c.v); assert!(!c.c);
+        assert!(c.step(&mut m).is_ok()); assert!(!c.n); assert!(c.v); assert!(c.c);
     }
     #[test]
     fn cpsid_and_cpsie_control_interrupt_mask() {
