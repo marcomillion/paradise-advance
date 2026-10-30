@@ -36,16 +36,16 @@ pub enum CpuFault { UnsupportedInstruction(u16), InvalidExecutionAddress(u32), H
 pub struct ThumbCpu {
     pub r: [u32; 16],
     pub n: bool, pub z: bool, pub c: bool, pub v: bool,
-    pub instructions: u64, pub halted: bool, pub last_fault: Option<CpuFault>, in_irq: bool, primask: bool, itstate: u8,
+    pub instructions: u64, pub halted: bool, pub last_fault: Option<CpuFault>, in_irq: bool, primask: bool, itstate: u8, ipsr: u32,
 }
 impl ThumbCpu {
     pub fn new() -> Self {
-        Self { r:[0;16], n:false,z:false,c:false,v:false,instructions:0,halted:false,last_fault:None,in_irq:false,primask:false,itstate:0 }
+        Self { r:[0;16], n:false,z:false,c:false,v:false,instructions:0,halted:false,last_fault:None,in_irq:false,primask:false,itstate:0,ipsr:0 }
     }
     pub fn reset_from_vectors(&mut self, memory:&MemoryStorage, vector_base:u32) {
         self.r=[0;16]; self.r[13]=memory.read_u32(vector_base);
         self.r[15]=memory.read_u32(vector_base.wrapping_add(4)) & !1;
-        self.halted=false; self.last_fault=None; self.instructions=0; self.in_irq=false; self.primask=false; self.itstate=0;
+        self.halted=false; self.last_fault=None; self.instructions=0; self.in_irq=false; self.primask=false; self.itstate=0; self.ipsr=0;
     }
     fn set_nz(&mut self, value:u32) { self.n=value>>31!=0; self.z=value==0; }
     fn set_add_flags(&mut self,a:u32,b:u32,result:u32) { self.set_nz(result); self.c=(a as u64+b as u64)>u32::MAX as u64; self.v=(!(a^b)&(a^result)&0x8000_0000)!=0; }
@@ -193,7 +193,8 @@ impl ThumbCpu {
             let rd=((op2>>8)&0xF) as usize;let sysm=op2&0xFF;
             let value=match sysm {
                 0=>((self.n as u32)<<31)|((self.z as u32)<<30)|((self.c as u32)<<29)|((self.v as u32)<<28),
-                3=>((self.n as u32)<<31)|((self.z as u32)<<30)|((self.c as u32)<<29)|((self.v as u32)<<28)|(1<<24)|((self.itstate as u32&3)<<25)|(((self.itstate as u32>>2)&0x3F)<<10),
+                3=>((self.n as u32)<<31)|((self.z as u32)<<30)|((self.c as u32)<<29)|((self.v as u32)<<28)|(1<<24)|((self.itstate as u32&3)<<25)|(((self.itstate as u32>>2)&0x3F)<<10)|(self.ipsr&0x1FF),
+                5=>self.ipsr,
                 8|9=>self.r[13],
                 16=>self.primask as u32,
                 _=>0,
@@ -488,7 +489,7 @@ impl ThumbCpu {
     fn enter_exception(&mut self,m:&mut MemoryStorage,exception_number:u32) {
         let mut sp=self.r[13];
         let it=self.itstate as u32;
-        let xpsr=((self.n as u32)<<31)|((self.z as u32)<<30)|((self.c as u32)<<29)|((self.v as u32)<<28)|(1<<24)|((it&3)<<25)|(((it>>2)&0x3F)<<10);
+        let xpsr=((self.n as u32)<<31)|((self.z as u32)<<30)|((self.c as u32)<<29)|((self.v as u32)<<28)|(1<<24)|((it&3)<<25)|(((it>>2)&0x3F)<<10)|(self.ipsr&0x1FF);
         let frame=[self.r[0],self.r[1],self.r[2],self.r[3],self.r[12],self.r[14],self.r[15],xpsr];
         for value in frame.iter().rev() {
             sp=sp.wrapping_sub(4);
@@ -497,7 +498,7 @@ impl ThumbCpu {
         self.r[13]=sp;
         self.r[14]=0xFFFF_FFF9;
         self.r[15]=m.read_u32(exception_number.wrapping_mul(4))&!1;
-        self.in_irq=true;
+        self.ipsr=exception_number;self.in_irq=true;
     }
     fn service_pending_interrupt(&mut self,m:&mut MemoryStorage) {
         if self.in_irq || self.primask { return; }
@@ -520,6 +521,7 @@ impl ThumbCpu {
         self.n=xpsr&(1<<31)!=0; self.z=xpsr&(1<<30)!=0;
         self.c=xpsr&(1<<29)!=0; self.v=xpsr&(1<<28)!=0;
         self.itstate=((((xpsr>>25)&3)|(((xpsr>>10)&0x3F)<<2))&0xFF) as u8;
+        self.ipsr=xpsr&0x1FF;
         self.r[13]=sp; self.r[15]=pc&!1; self.in_irq=false;
     }
     fn advance_itstate(&mut self) {
