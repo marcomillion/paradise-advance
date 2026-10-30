@@ -46,6 +46,7 @@ jobs:
       - name: Package browser module and JavaScript bindings
         run: wasm-pack build wasm-core --target web --out-dir pkg --release
       - name: Commit generated browser package for GitHub Pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
