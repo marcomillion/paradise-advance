@@ -8,6 +8,7 @@ Implemented and covered by CI:
 - Browser-facing firmware metadata inspection.
 - AES-128/AES-256 primitives ported from infinition/capybara (GPL-3.0-only).
 - Sonix CBC/OFB encrypted-region decryption when a user supplies the 32-bit device key; decryption operates on an in-memory copy.
+- Chunked browser-side device-key candidate search based on the first encrypted vector block, with progress and cancellation; it stays local and can take a very long time across the full 32-bit space.
 - SNC73410 PRAM, boot-ROM, SRAM, mailbox and flash storage regions.
 - Incremental Thumb interpreter for common 16-bit instructions plus Thumb-2 MOVW/MOVT and BL; includes immediate operations, shifts, ALU operations, loads/stores, branches, stack and block transfers.
 - Browser bindings to load a Sonix image with a supplied key, copy its declared user-code region into PRAM, validate the reset vector, and step/run instructions.
@@ -20,7 +21,7 @@ Not yet implemented / known limitations:
 - Most hardware peripherals are not yet wired to the CPU: timers, SPI, flash controller, NVIC/interrupt behavior and much of the MMIO map remain missing. The current DMA path supports the observed channel register layout and transfers into the LCD panel data register, but is not a complete DMA controller and does not prove the retail display driver works.
 - Complete initialization behavior required by the retail firmware.
 - Verified boot of the user's encrypted dump. The browser UI now exposes the WASM CPU controls and an experimental SRAM framebuffer snapshot, but retail firmware has not been proven to boot.
-- Key recovery in-browser; the current loading API requires the correct device key from the user. A wrong key should fail reset-vector validation, but this is not a substitute for complete firmware validation.
+- Device-key search is a heuristic candidate search over a 32-bit space, not yet validated against the user's retail dump. A candidate must still be tested by loading firmware and checking the reset vector / execution; a successful key search does not mean the emulator has booted.
 
 The current CPU is deliberately strict: unsupported instructions halt with an explicit fault instead of silently pretending to execute them. A valid load/decryption result does not mean the firmware has booted.
 
