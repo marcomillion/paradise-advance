@@ -13,8 +13,143 @@ const $$ = (selector) => [...document.querySelectorAll(selector)];
 ========================================= */
 
 const pixelCanvas = $("#pixel-canvas");
+/* PIXEL LAB ZOOM */
+
+let zoomLevel = 1;
+
+const canvasStage = $(".canvas-stage");
+const zoomControls = document.createElement("div");
+
+zoomControls.className = "zoom-controls";
+
+zoomControls.innerHTML = `
+    <button type="button" id="zoom-out" title="Zoom out">−</button>
+
+    <input
+        type="range"
+        id="zoom-slider"
+        min="1"
+        max="8"
+        step="0.25"
+        value="1"
+        aria-label="Canvas zoom"
+    >
+
+    <span class="zoom-label" id="zoom-label">100%</span>
+
+    <button type="button" id="zoom-in" title="Zoom in">+</button>
+
+    <button type="button" id="zoom-reset" title="Reset zoom">
+        Reset
+    </button>
+`;
+
+canvasStage.before(zoomControls);
+
+const zoomSlider = $("#zoom-slider");
+const zoomLabel = $("#zoom-label");
+
+function updateZoom() {
+    zoomLevel = Number(zoomSlider.value);
+
+    const baseSize = 512;
+
+    pixelCanvas.style.width = `${baseSize * zoomLevel}px`;
+    pixelCanvas.style.height = `${baseSize * zoomLevel}px`;
+
+    zoomLabel.textContent = `${Math.round(zoomLevel * 100)}%`;
+
+    updateCursorPreviewPosition();
+}
+
+$("#zoom-in").addEventListener("click", () => {
+    zoomSlider.value = Math.min(
+        8,
+        Number(zoomSlider.value) + 0.25
+    );
+
+    updateZoom();
+});
+
+$("#zoom-out").addEventListener("click", () => {
+    zoomSlider.value = Math.max(
+        1,
+        Number(zoomSlider.value) - 0.25
+    );
+
+    updateZoom();
+});
+
+$("#zoom-reset").addEventListener("click", () => {
+    zoomSlider.value = 1;
+    updateZoom();
+});
+
+zoomSlider.addEventListener("input", updateZoom);
+
+updateZoom();
 const pixelContext = pixelCanvas.getContext("2d", {
     willReadFrequently: true
+});
+/* PIXEL CURSOR PREVIEW */
+
+const cursorPreview = document.createElement("div");
+
+cursorPreview.className = "pixel-cursor-preview";
+
+canvasStage.appendChild(cursorPreview);
+
+function updateCursorPreviewPosition(event) {
+    if (event) {
+        const rect = pixelCanvas.getBoundingClientRect();
+
+        if (
+            event.clientX < rect.left ||
+            event.clientX >= rect.right ||
+            event.clientY < rect.top ||
+            event.clientY >= rect.bottom
+        ) {
+            cursorPreview.style.display = "none";
+            return;
+        }
+
+        const position = getCanvasPosition(event);
+
+        const stageRect = canvasStage.getBoundingClientRect();
+
+        const pixelWidth = rect.width / pixelCanvas.width;
+        const pixelHeight = rect.height / pixelCanvas.height;
+
+        const brushSize = currentTool === "fill"
+            ? 1
+            : Number(brushSizeSelect.value);
+
+        cursorPreview.style.left =
+            `${rect.left - stageRect.left + position.x * pixelWidth}px`;
+
+        cursorPreview.style.top =
+            `${rect.top - stageRect.top + position.y * pixelHeight}px`;
+
+        cursorPreview.style.width =
+            `${Math.min(brushSize, pixelCanvas.width - position.x) * pixelWidth}px`;
+
+        cursorPreview.style.height =
+            `${Math.min(brushSize, pixelCanvas.height - position.y) * pixelHeight}px`;
+
+        cursorPreview.style.display = "block";
+
+        return;
+    }
+
+    cursorPreview.style.display = "none";
+}
+
+pixelCanvas.addEventListener("pointermove", (event) => {
+    updateCursorPreviewPosition(event);
+});
+
+pixelCanvas.addEventListener("pointerleave", () => {
+    updateCursorPreviewPosition();
 });
 
 const simulatorCanvas = $("#simulator-screen");
@@ -316,6 +451,7 @@ function startDrawing(event) {
     event.preventDefault();
 
     const position = getCanvasPosition(event);
+    updateCursorPreviewPosition(event);
 
     if (currentTool === "fill") {
         saveUndoState();
@@ -350,6 +486,7 @@ function continueDrawing(event) {
     event.preventDefault();
 
     const position = getCanvasPosition(event);
+   updateCursorPreviewPosition(event);
 
     drawAt(position.x, position.y);
 
