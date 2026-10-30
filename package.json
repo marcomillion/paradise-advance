@@ -1,0 +1,12 @@
+{
+  "name": "paradise-mod-studio",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Browser smoke tests for Paradise Mod Studio",
+  "scripts": {
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
+  }
+}
