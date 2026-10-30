@@ -1,7 +1,7 @@
 // Browser worker adapter for the generated wasm-pack package.
 // Copy the CI artifact's pkg/ directory beside this file before enabling it in the site.
 // No firmware bytes or device keys are logged or sent over the network.
-import init, { BrowserCpu, BrowserFirmwareInfo } from "./pkg/paradise_wasm_core.js";
+import init, { BrowserCpu, BrowserFirmwareInfo, search_device_key_candidates } from "./pkg/paradise_wasm_core.js";
 
 let ready = false;
 let cpu = null;
@@ -19,6 +19,31 @@ self.onmessage = async (event) => {
       return;
     }
     if (!ready) throw new Error("WASM core is not initialized.");
+    if (type === "cancel-key-search") {
+      keySearchToken++;
+      self.postMessage({ id, ok: true, result: { cancelled: true }});
+      return;
+    }
+    if (type === "search-key") {
+      const token = ++keySearchToken;
+      const bytes = new Uint8Array(payload.bytes);
+      const chunkSize = Number(payload.chunkSize) || 20000;
+      let start = Number(payload.start) || 0;
+      const keySpace = 4294967296;
+      while (start < keySpace && token === keySearchToken) {
+        const count = Math.min(chunkSize, keySpace - start);
+        const found = search_device_key_candidates(bytes, start >>> 0, count);
+        if (found !== undefined && found !== null) {
+          self.postMessage({ id, ok: true, result: { found: true, key: Number(found) >>> 0, tested: start + count }});
+          return;
+        }
+        start += count;
+        self.postMessage({ type: "key-search-progress", tested: start, total: keySpace, percent: start * 100 / keySpace });
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+      if (token === keySearchToken) self.postMessage({ id, ok: true, result: { found: false, exhausted: true, tested: start }});
+      return;
+    }
     if (type === "inspect") {
       const info = new BrowserFirmwareInfo(new Uint8Array(payload.bytes));
       self.postMessage({ id, ok: true, result: {
