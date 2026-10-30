@@ -106,44 +106,7 @@ impl BrowserCpu {
     /// Load a Sonix image using the caller-supplied device key, then prepare its user-code
     /// vector table in PRAM. This does not yet emulate the full boot ROM or MMIO devices.
     pub fn load_sonix_firmware(&mut self, bytes:&[u8], device_key:u32) -> Result<(),JsValue> {
-        if bytes.len()!=16*1024*1024 { return Err(JsValue::from_str("Expected a 16 MiB flash dump.")); }
-        let decrypted=decrypt_dump_with_key(bytes,device_key).map_err(JsValue::from_str)?;
-        let table=find_tables(&decrypted).into_iter().next()
-            .ok_or_else(||JsValue::from_str("No valid Sonix load table found"))?;
-        // Validate the decrypted user region before mutating emulator state. A wrong key
-        // or malformed vector table must not leave a half-loaded flash/PRAM image behind.
-        let off=(table.user_code.address & 0x00FF_FFFF) as usize;
-        let end=off.checked_add(table.user_code.length as usize)
-            .ok_or_else(||JsValue::from_str("Firmware region address overflow"))?;
-        let region=decrypted.get(off..end)
-            .ok_or_else(||JsValue::from_str("Declared user-code region is outside the dump"))?;
-        if region.len()<8 {
-            return Err(JsValue::from_str("User-code region is too short to contain its initial vectors."));
-        }
-        let stack_pointer=u32::from_le_bytes(region[0..4].try_into().unwrap());
-        let reset_vector=u32::from_le_bytes(region[4..8].try_into().unwrap());
-        if reset_vector&1==0 {
-            return Err(JsValue::from_str("User-code reset vector is not Thumb; device key may be incorrect."));
-        }
-        if (reset_vector&!1)>=table.user_code.length || (reset_vector&!1)>=crate::memory::PRAM_SIZE as u32 {
-            return Err(JsValue::from_str("Reset vector points outside the loaded user-code region; device key may be incorrect."));
-        }
-        let sram_start=crate::memory::SRAM_BASE;
-        let sram_end=sram_start+crate::memory::SRAM_SIZE as u32;
-        let mailbox_start=crate::memory::MAILBOX_BASE;
-        let mailbox_end=mailbox_start+crate::memory::MAILBOX_SIZE as u32;
-        let stack_in_ram=(sram_start..=sram_end).contains(&stack_pointer)
-            || (mailbox_start..=mailbox_end).contains(&stack_pointer);
-        if !stack_in_ram || stack_pointer&3!=0 {
-            return Err(JsValue::from_str("Initial stack pointer is outside supported RAM or is not 4-byte aligned; device key may be incorrect."));
-        }
-
-        // Commit the validated image only after every structural check succeeds.
-        self.memory.load_flash(&decrypted).map_err(JsValue::from_str)?;
-        self.memory.load_pram(region);
-        self.cpu.reset_from_vectors(&self.memory,0);
-        self.display = DisplayController::new();
-        Ok(())
+        load_sonix_firmware_inner(self, bytes, device_key).map_err(|error| JsValue::from_str(&error))
     }
     pub fn reset_from_vectors(&mut self, vector_base:u32) {
         self.cpu.reset_from_vectors(&self.memory,vector_base);
@@ -181,6 +144,46 @@ impl BrowserCpu {
     pub fn instructions(&self)->u64 {self.cpu.instructions}
     pub fn halted(&self)->bool {self.cpu.halted}
     pub fn last_fault(&self)->String {format!("{:?}",self.cpu.last_fault)}
+}
+fn load_sonix_firmware_inner(cpu:&mut BrowserCpu, bytes:&[u8], device_key:u32) -> Result<(),String> {
+    if bytes.len()!=16*1024*1024 { return Err("Expected a 16 MiB flash dump.".to_string()); }
+    let decrypted=decrypt_dump_with_key(bytes,device_key)?;
+    let table=find_tables(&decrypted).into_iter().next()
+        .ok_or_else(||"No valid Sonix load table found".to_string())?;
+    // Validate the decrypted user region before mutating emulator state. A wrong key
+    // or malformed vector table must not leave a half-loaded flash/PRAM image behind.
+    let off=(table.user_code.address & 0x00FF_FFFF) as usize;
+    let end=off.checked_add(table.user_code.length as usize)
+        .ok_or_else(||"Firmware region address overflow".to_string())?;
+    let region=decrypted.get(off..end)
+        .ok_or_else(||"Declared user-code region is outside the dump".to_string())?;
+    if region.len()<8 {
+        return Err("User-code region is too short to contain its initial vectors.".to_string());
+    }
+    let stack_pointer=u32::from_le_bytes(region[0..4].try_into().unwrap());
+    let reset_vector=u32::from_le_bytes(region[4..8].try_into().unwrap());
+    if reset_vector&1==0 {
+        return Err("User-code reset vector is not Thumb; device key may be incorrect.".to_string());
+    }
+    if (reset_vector&!1)>=table.user_code.length || (reset_vector&!1)>=crate::memory::PRAM_SIZE as u32 {
+        return Err("Reset vector points outside the loaded user-code region; device key may be incorrect.".to_string());
+    }
+    let sram_start=crate::memory::SRAM_BASE;
+    let sram_end=sram_start+crate::memory::SRAM_SIZE as u32;
+    let mailbox_start=crate::memory::MAILBOX_BASE;
+    let mailbox_end=mailbox_start+crate::memory::MAILBOX_SIZE as u32;
+    let stack_in_ram=(sram_start..=sram_end).contains(&stack_pointer)
+        || (mailbox_start..=mailbox_end).contains(&stack_pointer);
+    if !stack_in_ram || stack_pointer&3!=0 {
+        return Err("Initial stack pointer is outside supported RAM or is not 4-byte aligned; device key may be incorrect.".to_string());
+    }
+
+    // Commit the validated image only after every structural check succeeds.
+    cpu.memory.load_flash(&decrypted)?;
+    cpu.memory.load_pram(region);
+    cpu.cpu.reset_from_vectors(&cpu.memory,0);
+    cpu.display=DisplayController::new();
+    Ok(())
 }
 impl Default for BrowserCpu {fn default()->Self{Self::new()}}
 
@@ -282,7 +285,7 @@ mod browser_integration_tests {
         image[0x1004..0x1008].copy_from_slice(&0x0000_0201u32.to_le_bytes());
 
         let mut cpu = BrowserCpu::new();
-        let error = cpu.load_sonix_firmware(&image, 0).unwrap_err().as_string().unwrap();
+        let error = load_sonix_firmware_inner(&mut cpu, &image, 0).unwrap_err();
         assert!(error.contains("outside the loaded user-code region"));
     }
 
