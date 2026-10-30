@@ -24,7 +24,9 @@ export class BrowserCpu {
     constructor();
     register(index: number): number;
     reset_from_vectors(vector_base: number): void;
+    rotate_dial(delta: number): void;
     run_steps(count: number): number;
+    set_button(index: number, pressed: boolean): void;
     set_register(index: number, value: number): void;
     step(): void;
 }
@@ -99,7 +101,9 @@ export interface InitOutput {
     readonly browsercpu_new: () => number;
     readonly browsercpu_register: (a: number, b: number) => [number, number, number];
     readonly browsercpu_reset_from_vectors: (a: number, b: number) => void;
+    readonly browsercpu_rotate_dial: (a: number, b: number) => void;
     readonly browsercpu_run_steps: (a: number, b: number) => number;
+    readonly browsercpu_set_button: (a: number, b: number, c: number) => [number, number];
     readonly browsercpu_set_register: (a: number, b: number, c: number) => [number, number];
     readonly browsercpu_step: (a: number) => [number, number];
     readonly browserdisplay_clear_dirty: (a: number) => void;

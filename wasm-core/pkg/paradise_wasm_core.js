@@ -124,12 +124,28 @@ export class BrowserCpu {
         wasm.browsercpu_reset_from_vectors(this.__wbg_ptr, vector_base);
     }
     /**
+     * @param {number} delta
+     */
+    rotate_dial(delta) {
+        wasm.browsercpu_rotate_dial(this.__wbg_ptr, delta);
+    }
+    /**
      * @param {number} count
      * @returns {number}
      */
     run_steps(count) {
         const ret = wasm.browsercpu_run_steps(this.__wbg_ptr, count);
         return ret >>> 0;
+    }
+    /**
+     * @param {number} index
+     * @param {boolean} pressed
+     */
+    set_button(index, pressed) {
+        const ret = wasm.browsercpu_set_button(this.__wbg_ptr, index, pressed);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
     }
     /**
      * @param {number} index
