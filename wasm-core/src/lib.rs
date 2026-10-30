@@ -111,10 +111,11 @@ impl BrowserCpu {
         let region=decrypted.get(off..end)
             .ok_or_else(||JsValue::from_str("Declared user-code region is outside the dump"))?;
         self.memory.load_pram(region);
-        self.cpu.reset_from_vectors(&self.memory,0);
-        if self.cpu.r[15]&1==0 {
+        let reset_vector=self.memory.read_u32(4);
+        if reset_vector&1==0 {
             return Err(JsValue::from_str("User-code reset vector is not Thumb; device key may be incorrect."));
         }
+        self.cpu.reset_from_vectors(&self.memory,0);
         Ok(())
     }
     pub fn reset_from_vectors(&mut self, vector_base:u32) {
