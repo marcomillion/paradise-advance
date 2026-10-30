@@ -35,6 +35,7 @@ pub struct MemoryStorage {
     pub gpio_buttons: [bool; 3], pub dial_counter: i32,
     pub dma_registers: [u32; 78], pub panel_frame: Option<Vec<u16>>, pub dma_irq_pending: bool,
     pub nvic_iser: [u32; 2],
+    pub systick_ctrl: u32, pub systick_reload: u32, pub systick_current: u32, pub systick_pending: bool,
 }
 impl MemoryStorage {
     pub fn new() -> Self {
@@ -45,7 +46,8 @@ impl MemoryStorage {
         Self { pram:vec![0;PRAM_SIZE], boot_rom, sram:vec![0;SRAM_SIZE],
             mailbox:vec![0;MAILBOX_SIZE], flash:vec![0xFF;FLASH_SIZE],
             gpio_buttons:[false;3], dial_counter:0,
-            dma_registers:[0;78], panel_frame:None, dma_irq_pending:false, nvic_iser:[0;2] }
+            dma_registers:[0;78], panel_frame:None, dma_irq_pending:false, nvic_iser:[0;2],
+            systick_ctrl:0, systick_reload:0, systick_current:0, systick_pending:false }
     }
     pub fn load_pram(&mut self, bytes: &[u8]) {
         self.pram.fill(0);
@@ -61,6 +63,15 @@ impl MemoryStorage {
         self.gpio_buttons[index] = pressed; true
     }
     pub fn rotate_dial(&mut self, delta: i32) { self.dial_counter = self.dial_counter.wrapping_add(delta); }
+    pub fn tick_systick(&mut self) {
+        if self.systick_ctrl&1==0 { return; }
+        if self.systick_current==0 { self.systick_current=self.systick_reload; }
+        else { self.systick_current-=1; }
+        if self.systick_current==0 {
+            self.systick_ctrl|=1<<16;
+            if self.systick_ctrl&2!=0 { self.systick_pending=true; }
+        }
+    }
     pub fn dma_irq_enabled(&self) -> bool { self.nvic_iser[1] & (1 << (58-32)) != 0 }
     fn gpio_register(&self, offset: u32) -> u32 {
         match offset {
@@ -70,6 +81,11 @@ impl MemoryStorage {
         }
     }
     pub fn read_u8(&self, address: u32) -> u8 {
+        if (0xE000_E010..0xE000_E020).contains(&address) {
+            let offset=address-0xE000_E010;
+            let reg=match offset/4 {0=>self.systick_ctrl,1=>self.systick_reload,2=>self.systick_current,3=>0x00FF_FFFF,_=>0};
+            return ((reg >> ((offset&3)*8)) & 0xff) as u8;
+        }
         if (0xE000_E100..0xE000_E108).contains(&address) {
             let offset=address-0xE000_E100; let reg=self.nvic_iser[(offset/4) as usize];
             return ((reg >> ((offset&3)*8)) & 0xff) as u8;
@@ -99,6 +115,16 @@ impl MemoryStorage {
             self.read_u8(address.wrapping_add(2)),self.read_u8(address.wrapping_add(3))])
     }
     pub fn write_u8(&mut self, address: u32, value: u8) -> bool {
+        if (0xE000_E010..0xE000_E020).contains(&address) {
+            let offset=address-0xE000_E010; let shift=(offset&3)*8; let mask=!(0xffu32<<shift);
+            match offset/4 {
+                0=>self.systick_ctrl=((self.systick_ctrl&mask)|((value as u32)<<shift))&0x7,
+                1=>self.systick_reload=((self.systick_reload&mask)|((value as u32)<<shift))&0x00FF_FFFF,
+                2=>{self.systick_current=0;self.systick_pending=false;self.systick_ctrl&=!(1<<16);},
+                _=>{},
+            }
+            return true;
+        }
         if (0xE000_E100..0xE000_E108).contains(&address) {
             let offset=address-0xE000_E100; let bank=(offset/4) as usize; let shift=(offset&3)*8;
             self.nvic_iser[bank] |= (value as u32) << shift; return true;
@@ -183,6 +209,17 @@ mod tests {
         wr32(&mut m,0x4000_F100,1);
         assert_eq!(m.panel_frame,Some(vec![0x07E0,0x001F]));
         assert_eq!(m.dma_registers[0x100/4]&1,0);
+    }
+    #[test]
+    fn systick_counts_down_and_sets_pending_interrupt() {
+        let mut m=MemoryStorage::new();
+        fn wr32(m:&mut MemoryStorage,a:u32,v:u32){for i in 0..4 {m.write_u8(a+i,(v>>(8*i)) as u8);}}
+        wr32(&mut m,0xE000_E014,2);
+        wr32(&mut m,0xE000_E010,3); // ENABLE | TICKINT
+        m.tick_systick(); m.tick_systick(); m.tick_systick();
+        assert!(m.systick_pending);
+        assert_eq!(m.systick_current,0);
+        assert_ne!(m.read_u32(0xE000_E010)&(1<<16),0);
     }
     #[test]
     fn gpio_buttons_are_active_low_and_dial_is_readable() {
