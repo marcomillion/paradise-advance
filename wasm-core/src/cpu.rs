@@ -33,6 +33,51 @@ impl ThumbCpu {
         let second=m.read_u8(pc.wrapping_add(2)) as u16 | ((m.read_u8(pc.wrapping_add(3)) as u16)<<8);
         let op1=first; let op2=second;
         self.r[15]=pc.wrapping_add(4);
+        // Multiply, multiply-accumulate, and divide forms used by compiled C code.
+        if (op1&0xFF80)==0xFB00 || (op1&0xFF80)==0xFB80 {
+            let rn=(op1&0xF) as usize;
+            let rm=(op2&0xF) as usize;
+            let rd_hi=((op2>>8)&0xF) as usize;
+            let rd_lo=((op2>>12)&0xF) as usize;
+            let kind=(op2>>4)&0xF;
+            let a=self.r[rn]; let b=self.r[rm];
+            match op1&0xFFF0 {
+                0xFB00=>{
+                    let product=a.wrapping_mul(b);
+                    let result=if rd_lo==15 {product} else if kind==0 {self.r[rd_lo].wrapping_add(product)} else if kind==1 {self.r[rd_lo].wrapping_sub(product)} else {
+                        let f=CpuFault::UnsupportedInstruction(op1);self.halted=true;self.last_fault=Some(f);return Err(f);
+                    };
+                    self.r[rd_hi]=result;
+                },
+                0xFB80 if kind==0=>{
+                    let product=(a as i32 as i64).wrapping_mul(b as i32 as i64) as u64;
+                    self.r[rd_lo]=product as u32;self.r[rd_hi]=(product>>32) as u32;
+                },
+                0xFB90 if kind==15=>{
+                    self.r[rd_hi]=if b==0 {0}else{(a as i32).wrapping_div(b as i32) as u32};
+                },
+                0xFBA0 if kind==0=>{
+                    let product=(a as u64).wrapping_mul(b as u64);
+                    self.r[rd_lo]=product as u32;self.r[rd_hi]=(product>>32) as u32;
+                },
+                0xFBB0 if kind==15=>{
+                    self.r[rd_hi]=if b==0 {0}else{a/b};
+                },
+                0xFBC0 if kind==0=>{
+                    let acc=((self.r[rd_hi] as u64)<<32)|self.r[rd_lo] as u64;
+                    let product=(a as i32 as i64).wrapping_mul(b as i32 as i64) as u64;
+                    let result=acc.wrapping_add(product);
+                    self.r[rd_lo]=result as u32;self.r[rd_hi]=(result>>32) as u32;
+                },
+                0xFBE0 if kind==0=>{
+                    let acc=((self.r[rd_hi] as u64)<<32)|self.r[rd_lo] as u64;
+                    let result=acc.wrapping_add((a as u64).wrapping_mul(b as u64));
+                    self.r[rd_lo]=result as u32;self.r[rd_hi]=(result>>32) as u32;
+                },
+                _=>{let f=CpuFault::UnsupportedInstruction(op1);self.halted=true;self.last_fault=Some(f);return Err(f);}
+            }
+            self.instructions=self.instructions.wrapping_add(1);return Ok(());
+        }
         // BFI/BFC/SBFX/UBFX bit-field operations.
         if (op1&0xFBF0)==0xF340 || (op1&0xFBF0)==0xF360 || (op1&0xFBF0)==0xF3C0 {
             let rn=(op1&0xF) as usize;
@@ -544,6 +589,16 @@ mod tests {
         let mut c=ThumbCpu::new(); c.r[15]=0; c.r[1]=0x1000;
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[0],0x1234); assert_eq!(c.r[15],4);
+    }
+    #[test]
+    fn executes_thumb2_multiply_and_unsigned_divide() {
+        let mut m=MemoryStorage::new();
+        // MUL r2, r0, r3; UDIV r2, r0, r3
+        m.write_u8(0,0x00);m.write_u8(1,0xFB);m.write_u8(2,0x03);m.write_u8(3,0xF2);
+        m.write_u8(4,0xB0);m.write_u8(5,0xFB);m.write_u8(6,0xF3);m.write_u8(7,0xF2);
+        let mut c=ThumbCpu::new();c.r[15]=0;c.r[0]=84;c.r[3]=7;
+        assert!(c.step(&mut m).is_ok());assert_eq!(c.r[2],588);
+        assert!(c.step(&mut m).is_ok());assert_eq!(c.r[2],12);
     }
     #[test]
     fn executes_thumb2_bfc_sbfx_and_lsl_register() {
