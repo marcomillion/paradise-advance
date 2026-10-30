@@ -62,3 +62,197 @@ function scanRawCandidates(){
  }
 }
 if($('scanFirmwareBtn'))$('scanFirmwareBtn').onclick=scanRawCandidates;
+
+
+/* Documented Tamagotchi Paradise archive + sprite-package reader.
+   Firmware remains in browser memory; this code never uploads it. */
+const paradiseExtract = { packages: [], filtered: [], shown: 0, pageSize: 36 };
+const readU16 = (a, p) => p >= 0 && p + 2 <= a.length ? a[p] | (a[p + 1] << 8) : 0;
+const readU32 = (a, p) => p >= 0 && p + 4 <= a.length ? (a[p] | (a[p + 1] << 8) | (a[p + 2] << 16) | (a[p + 3] << 24)) >>> 0 : 0;
+function parseSpriteHeader(data, start, packageLength) {
+ if (start < 0 || start + 24 > packageLength) return null;
+ const length=readU32(data,start), flags=data[start+4], bpp=data[start+5], count=readU16(data,start+6);
+ const width=data[start+8], height=data[start+9], imageWidth=data[start+12], imageHeight=data[start+13];
+ const paletteSets=data[start+15], transparent=readU16(data,start+16), paletteOffset=readU16(data,start+18), pixelOffset=readU16(data,start+20);
+ const supported=[0,1,2,3,16,17,18].includes(bpp);
+ if (!supported || !count || !width || !height || width>128 || height>128 || !imageWidth || !imageHeight) return null;
+ if ((flags & 0x60) === 0x60) return null;
+ if (length && (length<24 || start+length>packageLength)) return null;
+ if (paletteOffset>= (length || packageLength-start) || pixelOffset>= (length || packageLength-start)) return null;
+ return { length,flags,bpp,count,width,height,imageWidth,imageHeight,paletteSets,transparent,paletteOffset,pixelOffset };
+}
+function validateSpritePackage(data, absoluteOffset, length, sourceArchiveOffset, entryIndex) {
+ if (length < 28 || absoluteOffset < 0 || absoluteOffset+length>data.length) return null;
+ const first=readU32(data,absoluteOffset);
+ if (first<4 || first%4!==0 || first>Math.min(length,0x20000)) return null;
+ const count=first/4;
+ if (count<1 || count>20000 || first+24>length) return null;
+ let prev=first;
+ for(let i=0;i<count;i++){
+  const off=readU32(data,absoluteOffset+i*4);
+  if(off<first || off<prev || off+24>length) return null;
+  prev=off;
+ }
+ const firstHeader=parseSpriteHeader(data,absoluteOffset+readU32(data,absoluteOffset),length);
+ if(!firstHeader) return null;
+ let valid=0;
+ for(let i=0;i<Math.min(count,16);i++){
+  const h=parseSpriteHeader(data,absoluteOffset+readU32(data,absoluteOffset+i*4),length);
+  if(h) valid++;
+ }
+ if(valid<Math.min(count,3)) return null;
+ return { id:paradiseExtract.packages.length, offset:absoluteOffset, length, entryCount:count, sourceArchiveOffset, entryIndex, firstHeader };
+}
+function scanParadiseSpritePackages() {
+ const fw=state.firmware;
+ if(!fw) return toast('Load a firmware file first');
+ const data=fw.bytes, packages=[], seen=new Set();
+ const hasArc=(p)=>p>=0&&p+16<=data.length&&data[p]===0x41&&data[p+1]===0x52&&data[p+2]===0x43&&data[p+3]===0x32;
+ for(let p=0;(p=data.indexOf(0x41,p))!==-1;p++){
+  if(!hasArc(p)) continue;
+  const total=readU32(data,p+8), files=readU32(data,p+12);
+  if(!files||files>4096||total<files*16||p+16+total>data.length) continue;
+  const table=p+16;
+  if(table+files*16>p+16+total) continue;
+  for(let i=0;i<files;i++){
+   const e=table+i*16, off=readU32(data,e+4), comp=readU32(data,e+8), raw=readU32(data,e+12);
+   if(off<16+files*16||!comp||off+Math.max(comp,raw)>total||p+off+Math.max(comp,raw)>data.length) continue;
+   const absolute=p+off, key=absolute+':'+Math.max(comp,raw);
+   if(seen.has(key)) continue;
+   const candidate=validateSpritePackage(data,absolute,Math.max(comp,raw),p,i);
+   if(candidate){seen.add(key);packages.push(candidate)}
+  }
+ }
+ packages.sort((a,b)=>a.offset-b.offset);
+ paradiseExtract.packages=packages;
+ paradiseExtract.filtered=packages;
+ paradiseExtract.shown=0;
+ const search=$('spritePackageSearch');
+ if(search) search.disabled=!packages.length;
+ $('spritePackageCount').textContent=packages.length+' package'+(packages.length===1?'':'s')+' found';
+ $('spritePackageStatus').textContent=packages.length
+  ? 'Found '+packages.length+' structurally valid sprite package(s). Preview cards decode actual indexed/direct-color pixels, including supported RLE and XOR flags.'
+  : 'No documented sprite packages found in this file. Confirm that this is a complete Paradise flash dump.';
+ renderSpritePackagePage(true);
+}
+function rleDecode(src, wordwise, maxOutput) {
+ const out=[]; let p=0; const unit=wordwise?4:1;
+ while(p+unit<=src.length && out.length<maxOutput){
+  let ctrl=0; for(let j=0;j<unit;j++) ctrl=(ctrl | (src[p+j]<<(j*8)))>>>0; p+=unit;
+  if(ctrl===0) break;
+  const literal=wordwise ? !!(ctrl&0x80000000) : !!(ctrl&0x80);
+  const n=wordwise ? (ctrl&0x0fffffff) : (ctrl&0x7f);
+  if(literal){
+   const bytes=Math.min(n*unit,src.length-p,maxOutput-out.length);
+   for(let j=0;j<bytes;j++) out.push(src[p+j]);
+   p+=bytes;
+  }else{
+   if(p+unit>src.length) break;
+   const value=Array.from(src.subarray(p,p+unit));p+=unit;
+   const bytes=Math.min(n*unit,maxOutput-out.length);
+   for(let j=0;j<bytes;j++) out.push(value[j%unit]);
+  }
+ }
+ return new Uint8Array(out);
+}
+function decodeParadiseSpriteFrame(pkg, assetIndex, frameIndex, paletteSet=0) {
+ const fw=state.firmware;if(!fw) throw new Error('No firmware loaded');
+ const all=fw.bytes, base=pkg.offset, rel=readU32(all,base+assetIndex*4), start=base+rel;
+ const h=parseSpriteHeader(all,start,pkg.length);
+ if(!h) throw new Error('Invalid sprite header');
+ if(frameIndex<0||frameIndex>=h.count) throw new Error('Frame index is outside this sprite package');
+ const pixelsPerFrame=h.width*h.height;
+ const indexed=h.bpp<=3, bits=indexed?[1,2,4,8][h.bpp]:(h.bpp===18?24:16);
+ const expected=Math.ceil(pixelsPerFrame*bits/8);
+ let decoded;
+ const pixelBase=start+h.pixelOffset;
+ if(h.flags&0x60){
+  const relOffset=readU32(all,pixelBase+frameIndex*8), storedLength=readU32(all,pixelBase+frameIndex*8+4);
+  const rawOffset=relOffset&0x7fffffff, absolute=pixelBase+rawOffset;
+  if(absolute<0||storedLength>pkg.length||absolute+storedLength>base+pkg.length) throw new Error('Pixel data range is invalid');
+  let stored=all.slice(absolute,absolute+storedLength);
+  if(h.flags&0x80) stored=stored.map(v=>v^0x53);
+  decoded=(relOffset&0x80000000)?stored:rleDecode(stored,!!(h.flags&0x40),Math.min(expected*4+64,2*1024*1024));
+ }else{
+  const absolute=pixelBase+frameIndex*expected;
+  if(absolute+expected>base+pkg.length) throw new Error('Uncompressed pixel data is truncated');
+  decoded=all.slice(absolute,absolute+expected);
+  if(h.flags&0x80) decoded=decoded.map(v=>v^0x53);
+ }
+ const rgba=new Uint8ClampedArray(pixelsPerFrame*4), colors=[];
+ if(indexed){
+  const maxColors=1<<bits, paletteBase=start+h.paletteOffset+Math.min(paletteSet,Math.max(0,h.paletteSets-1))*maxColors*2;
+  for(let i=0;i<maxColors;i++){
+   const c=readU16(all,paletteBase+i*2), r=((c>>11)&31)*255/31, g=((c>>5)&63)*255/63, b=(c&31)*255/31;
+   colors.push('#'+[r,g,b].map(v=>Math.round(v).toString(16).padStart(2,'0')).join(''));
+  }
+  let bit=0;
+  for(let i=0;i<pixelsPerFrame;i++){
+   const byte=bit>>3, shift=bit&7;
+   let idx=0;
+   for(let k=0;k<bits;k++) if(byte+(shift+k>>3)<decoded.length) idx|=((decoded[(bit+k)>>3]>>((bit+k)&7))&1)<<k;
+   const c=readU16(all,paletteBase+idx*2), r=Math.round(((c>>11)&31)*255/31),g=Math.round(((c>>5)&63)*255/63),b=Math.round((c&31)*255/31);
+   const at=i*4;rgba[at]=r;rgba[at+1]=g;rgba[at+2]=b;rgba[at+3]=((h.flags&4)&&idx===h.transparent)?0:255;bit+=bits;
+  }
+ }else{
+  for(let i=0;i<pixelsPerFrame;i++){
+   let r,g,b,alpha=255,word=0;
+   if(h.bpp===18){const k=i*3;r=decoded[k]||0;g=decoded[k+1]||0;b=decoded[k+2]||0;word=((r>>3)<<11)|((g>>2)<<5)|(b>>3)}
+   else{const k=i*2;word=readU16(decoded,k);r=Math.round(((word>>11)&31)*255/31);g=Math.round(((word>>5)&63)*255/63);b=Math.round((word&31)*255/31)}
+   if((h.flags&4)&&word===h.transparent)alpha=0;
+   const at=i*4;rgba[at]=r;rgba[at+1]=g;rgba[at+2]=b;rgba[at+3]=alpha;
+  }
+ }
+ return {width:h.width,height:h.height,rgba,header:h};
+}
+function rgbaToPixels(decoded) {
+ const pixels=[], palette=[];
+ const map=new Map();
+ for(let i=0;i<decoded.rgba.length;i+=4){
+  if(decoded.rgba[i+3]===0){pixels.push(null);continue}
+  const color='#'+[decoded.rgba[i],decoded.rgba[i+1],decoded.rgba[i+2]].map(v=>v.toString(16).padStart(2,'0')).join('');
+  pixels.push(color);if(!map.has(color)){map.set(color,true);palette.push(color)}
+ }
+ return {pixels,palette:palette.length?palette:['#000000']};
+}
+function drawDecodedSprite(canvas, decoded) {
+ canvas.width=decoded.width;canvas.height=decoded.height;
+ const ctx=canvas.getContext('2d');ctx.imageSmoothingEnabled=false;
+ ctx.putImageData(new ImageData(decoded.rgba,decoded.width,decoded.height),0,0);
+ canvas.style.width=Math.max(64,Math.min(160,decoded.width*3))+'px';
+ canvas.style.height=Math.max(64,Math.min(160,decoded.height*3))+'px';
+}
+function renderSpritePackagePage(reset=false) {
+ const grid=$('spritePackageResults');if(!grid)return;
+ if(reset){grid.innerHTML='';paradiseExtract.shown=0}
+ const search=($('spritePackageSearch')?.value||'').trim().toLowerCase();
+ paradiseExtract.filtered=paradiseExtract.packages.filter(p=>{
+  const h=p.firstHeader, hay=[p.offset.toString(16),p.offset.toString(10),p.entryCount,h.width+'x'+h.height,h.bpp,h.count].join(' ').toLowerCase();
+  return hay.includes(search);
+ });
+ if(reset) paradiseExtract.shown=0;
+ const start=paradiseExtract.shown,end=Math.min(start+paradiseExtract.pageSize,paradiseExtract.filtered.length);
+ for(let n=start;n<end;n++){
+  const pkg=paradiseExtract.filtered[n],h=pkg.firstHeader;
+  const card=document.createElement('article');card.className='sprite-package-card';
+  const canvas=document.createElement('canvas');canvas.className='sprite-package-preview';
+  try{drawDecodedSprite(canvas,decodeParadiseSpriteFrame(pkg,0,0))}catch(err){canvas.width=32;canvas.height=32;canvas.style.width='96px';canvas.style.height='96px'}
+  const title=document.createElement('b');title.textContent='Package @ 0x'+pkg.offset.toString(16).toUpperCase();
+  const meta=document.createElement('small');meta.textContent=pkg.entryCount+' image entries · first '+h.width+'×'+h.height+' · '+(h.bpp<=3?[1,2,4,8][h.bpp]+' bpp indexed':(h.bpp===18?'24-bit RGB':'16-bit RGB'));
+  const frameRow=document.createElement('label');frameRow.className='sprite-frame-row';frameRow.textContent='Frame ';
+  const frameInput=document.createElement('input');frameInput.type='number';frameInput.min='0';frameInput.max=String(Math.max(0,h.count-1));frameInput.value='0';frameInput.setAttribute('aria-label','Frame index');
+  frameRow.append(frameInput,document.createTextNode(' / '+h.count));
+  frameInput.addEventListener('change',()=>{const frame=Math.max(0,Math.min(h.count-1,Number(frameInput.value)||0));frameInput.value=String(frame);try{drawDecodedSprite(canvas,decodeParadiseSpriteFrame(pkg,0,frame))}catch(err){toast('Could not decode that frame: '+err.message)}});
+  const importBtn=document.createElement('button');importBtn.className='button primary';importBtn.textContent='Import frame to Studio';
+  importBtn.onclick=()=>{try{const decoded=decodeParadiseSpriteFrame(pkg,0,Math.max(0,Math.min(h.count-1,Number(frameInput.value)||0)));const converted=rgbaToPixels(decoded);createSprite('Firmware '+pkg.offset.toString(16).toUpperCase()+' frame '+frameInput.value,decoded.width,decoded.height,converted.pixels,converted.palette);nav('studio');toast('Decoded firmware sprite imported')}catch(err){toast('Import failed: '+err.message)}};
+  const exportBtn=document.createElement('button');exportBtn.className='button';exportBtn.textContent='Export PNG';exportBtn.onclick=()=>{try{const d=decodeParadiseSpriteFrame(pkg,0,Math.max(0,Math.min(h.count-1,Number(frameInput.value)||0)));const cv=document.createElement('canvas');cv.width=d.width;cv.height=d.height;cv.getContext('2d').putImageData(new ImageData(d.rgba,d.width,d.height),0,0);cv.toBlob(blob=>exportBlob(blob,'paradise_sprite_'+pkg.offset.toString(16)+'_'+frameInput.value+'.png'))}catch(err){toast('Export failed: '+err.message)}};
+  card.append(canvas,title,meta,frameRow,importBtn,exportBtn);grid.append(card);
+ }
+ paradiseExtract.shown=end;
+ const more=$('spritePackageMore');more.hidden=end>=paradiseExtract.filtered.length;
+ more.textContent='Show more packages ('+end+' of '+paradiseExtract.filtered.length+')';
+ if(!paradiseExtract.filtered.length) grid.textContent='No packages match this filter.';
+}
+if($('findSpritePackagesBtn')) $('findSpritePackagesBtn').addEventListener('click',scanParadiseSpritePackages);
+if($('spritePackageSearch')) $('spritePackageSearch').addEventListener('input',()=>renderSpritePackagePage(true));
+if($('spritePackageMore')) $('spritePackageMore').addEventListener('click',()=>renderSpritePackagePage(false));
