@@ -227,7 +227,7 @@ impl ThumbCpu {
             },
             0xB000..=0xB0FF => { let delta=((op&0x7f) as u32)*4; self.r[13]=if op&0x80!=0 {self.r[13].wrapping_sub(delta)} else {self.r[13].wrapping_add(delta)}; },
             0xD000..=0xDDFF => { let cond=(op>>8)&15; if cond<14 && self.condition(cond) {let off=(((op&0xff) as i8 as i32)<<1) as u32; self.r[15]=next.wrapping_add(2).wrapping_add(off);} },
-            0xE000..=0xE7FF => { let off=(((op&0x7ff) as i16)<<5>>4) as u32; self.r[15]=next.wrapping_add(off); },
+            0xE000..=0xE7FF => { let off=(((op&0x7ff) as i16)<<5>>4) as u32; self.r[15]=pc.wrapping_add(4).wrapping_add(off); },
             _ => { let f=CpuFault::UnsupportedInstruction(op); self.halted=true; self.last_fault=Some(f); return Err(f); }
         }
         self.instructions=self.instructions.wrapping_add(1); Ok(())
@@ -247,6 +247,15 @@ mod tests {
         assert!(c.step(&mut m).is_ok()); assert_eq!(c.r[0],42);
         assert!(c.step(&mut m).is_ok()); assert_eq!(c.r[0],43);
         assert_eq!(c.instructions,2);
+    }
+    #[test]
+    fn unconditional_branch_uses_pc_plus_four() {
+        let mut m=MemoryStorage::new();
+        // B +0 (branch target is PC + 4).
+        m.write_u8(0,0x00); m.write_u8(1,0xE0);
+        let mut c=ThumbCpu::new(); c.r[15]=0;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[15],4);
     }
     #[test]
     fn executes_asr_immediate_with_sign_extension() {
