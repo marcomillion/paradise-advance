@@ -81,13 +81,13 @@ self.onmessage = async (event) => {
     if (type === "step") {
       if (!cpu) throw new Error("CPU has not been created.");
       cpu.step();
-      self.postMessage({ id, ok: true, result: { instructions: cpu.instructions(), pc: cpu.register(15), halted: cpu.halted(), fault: cpu.last_fault() }});
+      self.postMessage({ id, ok: true, result: { instructions: cpu.instructions(), pc: cpu.register(15), halted: cpu.halted(), sleeping: cpu.sleeping(), fault: cpu.last_fault() }});
       return;
     }
     if (type === "run") {
       if (!cpu) throw new Error("CPU has not been created.");
       const executed = cpu.run_steps(Number(payload.count) || 1);
-      self.postMessage({ id, ok: true, result: { executed, instructions: cpu.instructions(), pc: cpu.register(15), halted: cpu.halted(), fault: cpu.last_fault() }});
+      self.postMessage({ id, ok: true, result: { executed, instructions: cpu.instructions(), pc: cpu.register(15), halted: cpu.halted(), sleeping: cpu.sleeping(), fault: cpu.last_fault() }});
       return;
     }
     if (type === "input") {

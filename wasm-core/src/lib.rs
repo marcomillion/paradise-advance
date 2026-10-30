@@ -147,6 +147,7 @@ impl BrowserCpu {
     pub fn display_enabled(&self)->bool {self.display.enabled()}
     pub fn instructions(&self)->u64 {self.cpu.instructions}
     pub fn halted(&self)->bool {self.cpu.halted}
+    pub fn sleeping(&self)->bool {self.cpu.is_sleeping()}
     pub fn last_fault(&self)->String {format!("{:?}",self.cpu.last_fault)}
 }
 fn load_sonix_firmware_inner(cpu:&mut BrowserCpu, bytes:&[u8], device_key:u32) -> Result<(),String> {

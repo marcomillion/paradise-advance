@@ -42,6 +42,7 @@ impl ThumbCpu {
     pub fn new() -> Self {
         Self { r:[0;16], n:false,z:false,c:false,v:false,instructions:0,halted:false,last_fault:None,in_irq:false,sleeping:false,event_register:false,primask:false,itstate:0,ipsr:0,exclusive_address:None }
     }
+    pub fn is_sleeping(&self) -> bool { self.sleeping }
     pub fn reset_from_vectors(&mut self, memory:&MemoryStorage, vector_base:u32) {
         self.r=[0;16]; self.r[13]=memory.read_u32(vector_base);
         self.r[15]=memory.read_u32(vector_base.wrapping_add(4)) & !1;
