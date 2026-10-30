@@ -67,11 +67,57 @@ impl ThumbCpu {
                     _=>{}
                 }
             },
+            0x4400..=0x47FF => {
+                let opkind=(op>>8)&3;
+                let rs=(((op>>3)&7)|((op>>3)&8)) as usize;
+                let rd=((op&7)|((op>>4)&8)) as usize;
+                match opkind {
+                    0=>{let v=self.r[rd].wrapping_add(self.r[rs]);if rd==15 {self.r[15]=v&!1;} else {self.r[rd]=v;}},
+                    1=>{let v=self.r[rd].wrapping_sub(self.r[rs]);self.set_nz(v);self.c=self.r[rd]>=self.r[rs];},
+                    2=>{let v=self.r[rs];if rd==15 {self.r[15]=v&!1;} else {self.r[rd]=v;}},
+                    3=>{self.r[14]=next|1;self.r[15]=self.r[rs]&!1;},
+                    _=>{}
+                }
+            },
+            0x5000..=0x5FFF => {
+                let opkind=(op>>9)&7; let addr=self.r[rn].wrapping_add(self.r[rm]);
+                match opkind {
+                    0=>{let v=self.r[rd];for i in 0..4 {m.write_u8(addr+i,(v>>(i*8)) as u8);}},
+                    1=>{m.write_u8(addr,self.r[rd] as u8);m.write_u8(addr+1,(self.r[rd]>>8) as u8);},
+                    2=>{m.write_u8(addr,self.r[rd] as u8);},
+                    3=>{self.r[rd]=m.read_u8(addr) as i8 as i32 as u32;},
+                    4=>{self.r[rd]=m.read_u32(addr);},
+                    5=>{self.r[rd]=m.read_u8(addr) as u32 | ((m.read_u8(addr+1) as u32)<<8);},
+                    6=>{self.r[rd]=m.read_u8(addr) as u32;},
+                    7=>{self.r[rd]=m.read_u8(addr) as i8 as i32 as u32;},
+                    _=>{}
+                }
+            },
             0x4800..=0x4FFF => { let d=((op>>8)&7) as usize; let addr=((pc.wrapping_add(4))&!3).wrapping_add(((op&0xff) as u32)*4); self.r[d]=m.read_u32(addr); },
             0x6000..=0x67FF => { let addr=self.r[rn].wrapping_add(((op>>6&31) as u32)*4); m.write_u8(addr,self.r[rd] as u8); m.write_u8(addr+1,(self.r[rd]>>8) as u8); m.write_u8(addr+2,(self.r[rd]>>16) as u8); m.write_u8(addr+3,(self.r[rd]>>24) as u8); },
             0x6800..=0x6FFF => { let addr=self.r[rn].wrapping_add(((op>>6&31) as u32)*4); self.r[rd]=m.read_u32(addr); },
             0x7000..=0x77FF => { let addr=self.r[rn].wrapping_add(((op>>6&31) as u32)); m.write_u8(addr,self.r[rd] as u8); },
             0x7800..=0x7FFF => { let addr=self.r[rn].wrapping_add(((op>>6&31) as u32)); self.r[rd]=m.read_u8(addr) as u32; },
+            0x8000..=0x8FFF => {
+                let addr=self.r[rn].wrapping_add(((op>>6&31) as u32)*2);
+                if op&0x0800!=0 {self.r[rd]=m.read_u8(addr) as u32|((m.read_u8(addr+1) as u32)<<8);}
+                else {let v=self.r[rd];m.write_u8(addr,v as u8);m.write_u8(addr+1,(v>>8) as u8);}
+            },
+            0xB400..=0xB5FF => {
+                let extra=op&0x0100!=0; let list=op&0xff;
+                if extra {self.r[13]=self.r[13].wrapping_sub(4);let v=self.r[14];for i in 0..4 {m.write_u8(self.r[13]+i,(v>>(i*8)) as u8);}}
+                for reg in (0..8).rev() {if list&(1<<reg)!=0 {self.r[13]=self.r[13].wrapping_sub(4);let v=self.r[reg];for i in 0..4 {m.write_u8(self.r[13]+i,(v>>(i*8)) as u8);}}}
+            },
+            0xBC00..=0xBDFF => {
+                let extra=op&0x0100!=0;let list=op&0xff;
+                for reg in 0..8 {if list&(1<<reg)!=0 {self.r[reg]=m.read_u32(self.r[13]);self.r[13]=self.r[13].wrapping_add(4);}}
+                if extra {let target=m.read_u32(self.r[13]);self.r[13]=self.r[13].wrapping_add(4);self.r[15]=target&!1;}
+            },
+            0xC000..=0xCFFF => {
+                let load=op&0x0800!=0;let base=((op>>8)&7) as usize;let list=op&0xff;let mut addr=self.r[base];
+                for reg in 0..8 {if list&(1<<reg)!=0 {if load {self.r[reg]=m.read_u32(addr);}else{let v=self.r[reg];for i in 0..4 {m.write_u8(addr+i,(v>>(i*8)) as u8);}}addr=addr.wrapping_add(4);}}
+                if list!=0 {self.r[base]=addr;}
+            },
             0x9000..=0x9FFF => { let d=((op>>8)&7) as usize; let addr=self.r[13].wrapping_add(((op&0xff) as u32)*4); if op&0x0800!=0 {self.r[d]=m.read_u32(addr);} else {let v=self.r[d];for i in 0..4 {m.write_u8(addr+i,(v>>(i*8)) as u8);}} },
             0xA000..=0xAFFF => { let d=((op>>8)&7) as usize; self.r[d]=((pc.wrapping_add(4))&!3).wrapping_add(((op&0xff) as u32)*4); },
             0xB000..=0xB0FF => { let delta=((op&0x7f) as u32)*4; self.r[13]=if op&0x80!=0 {self.r[13].wrapping_sub(delta)} else {self.r[13].wrapping_add(delta)}; },
