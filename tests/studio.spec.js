@@ -170,6 +170,10 @@ test('emulator status reports the browser core instead of showing a fake pet', a
   await expect(page.locator('#emulatorStatusTitle')).toHaveText('WASM core ready · awaiting firmware', { timeout: 15_000 });
   await expect(page.locator('#emulatorRunCount')).toBeVisible();
   await expect(page.locator('#emulatorStepBtn')).toBeDisabled();
+  await expect(page.locator('#keySearchTested')).toHaveText('—');
+  await expect(page.locator('#keySearchRate')).toHaveText('—');
+  await expect(page.locator('#keySearchPeakRate')).toHaveText('—');
+  await expect(page.locator('#keySearchProgressTrack')).toHaveAttribute('aria-valuenow', '0');
 });
 
 test('device key is remembered only after explicit opt-in', async ({ page }) => {
