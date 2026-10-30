@@ -2,6 +2,7 @@
 //! Firmware inspection is real; CPU execution and decryption are not yet integrated.
 
 mod aes;
+mod cpu;
 mod display;
 mod sonix;
 mod memory;
@@ -9,6 +10,7 @@ use wasm_bindgen::prelude::*;
 pub use display::{DisplayController, LCD_HEIGHT, LCD_WIDTH};
 pub use sonix::{find_tables, decrypt_dump_with_key, CipherMode, LoadTable, Region};
 pub use memory::{MemoryStorage, RegionKind};
+pub use cpu::{CpuFault, ThumbCpu};
 
 #[wasm_bindgen]
 pub struct BrowserDisplay { controller: DisplayController }
@@ -83,3 +85,39 @@ pub fn decrypt_firmware_with_key(bytes: &[u8], device_key: u32) -> Result<Vec<u8
     }
     decrypt_dump_with_key(bytes, device_key).map_err(JsValue::from_str)
 }
+
+/// Browser API for incremental Thumb execution against the portable memory model.
+/// Unsupported opcodes halt and report an error; this is not yet a full SNC73410 machine.
+#[wasm_bindgen]
+pub struct BrowserCpu { cpu: ThumbCpu, memory: MemoryStorage }
+#[wasm_bindgen]
+impl BrowserCpu {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> BrowserCpu { BrowserCpu { cpu:ThumbCpu::new(), memory:MemoryStorage::new() } }
+    pub fn load_flash(&mut self, bytes:&[u8]) -> Result<(),JsValue> {
+        self.memory.load_flash(bytes).map_err(JsValue::from_str)
+    }
+    pub fn reset_from_vectors(&mut self, vector_base:u32) {
+        self.cpu.reset_from_vectors(&self.memory,vector_base);
+    }
+    pub fn set_register(&mut self,index:u32,value:u32) -> Result<(),JsValue> {
+        if index>=16 {return Err(JsValue::from_str("Register index must be 0..15"));}
+        self.cpu.r[index as usize]=value; Ok(())
+    }
+    pub fn register(&self,index:u32)->Result<u32,JsValue> {
+        if index>=16 {return Err(JsValue::from_str("Register index must be 0..15"));}
+        Ok(self.cpu.r[index as usize])
+    }
+    pub fn step(&mut self)->Result<(),JsValue> {
+        self.cpu.step(&mut self.memory).map_err(|e|JsValue::from_str(&format!("{:?}",e)))
+    }
+    pub fn run_steps(&mut self,count:u32)->u32 {
+        let mut done=0;
+        for _ in 0..count.min(1_000_000) { if self.cpu.step(&mut self.memory).is_err(){break;} done+=1; }
+        done
+    }
+    pub fn instructions(&self)->u64 {self.cpu.instructions}
+    pub fn halted(&self)->bool {self.cpu.halted}
+    pub fn last_fault(&self)->String {format!("{:?}",self.cpu.last_fault)}
+}
+impl Default for BrowserCpu {fn default()->Self{Self::new()}}
