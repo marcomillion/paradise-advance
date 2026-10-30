@@ -735,6 +735,18 @@ mod tests {
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[2],0x1FF);
     }
     #[test]
+    fn executes_thumb2_stmia_and_ldmia_with_writeback() {
+        let mut m=MemoryStorage::new();
+        // STMIA r0!, {r1,r2}; LDMIA r3!, {r4,r5}
+        m.write_u8(0,0xA0);m.write_u8(1,0xE8);m.write_u8(2,0x06);m.write_u8(3,0x00);
+        m.write_u8(4,0xB3);m.write_u8(5,0xE8);m.write_u8(6,0x30);m.write_u8(7,0x00);
+        let mut c=ThumbCpu::new();c.r[15]=0;c.r[0]=0x100;c.r[1]=0x1111;c.r[2]=0x2222;c.r[3]=0x100;
+        assert!(c.step(&mut m).is_ok());assert_eq!(c.r[0],0x108);
+        assert_eq!(m.read_u32(0x100),0x1111);assert_eq!(m.read_u32(0x104),0x2222);
+        assert!(c.step(&mut m).is_ok());assert_eq!(c.r[3],0x108);
+        assert_eq!(c.r[4],0x1111);assert_eq!(c.r[5],0x2222);
+    }
+    #[test]
     fn executes_thumb2_ldrd_and_tbb() {
         let mut m=MemoryStorage::new();
         // LDRD r0, r1, [r2]; TBB [r3, r4]
