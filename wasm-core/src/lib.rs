@@ -117,9 +117,16 @@ impl BrowserCpu {
         let region=decrypted.get(off..end)
             .ok_or_else(||JsValue::from_str("Declared user-code region is outside the dump"))?;
         self.memory.load_pram(region);
+        let stack_pointer=self.memory.read_u32(0);
         let reset_vector=self.memory.read_u32(4);
         if reset_vector&1==0 {
             return Err(JsValue::from_str("User-code reset vector is not Thumb; device key may be incorrect."));
+        }
+        if (reset_vector&!1)>=table.user_code.length || (reset_vector&!1)>=crate::memory::PRAM_SIZE as u32 {
+            return Err(JsValue::from_str("Reset vector points outside the loaded user-code region; device key may be incorrect."));
+        }
+        if stack_pointer==0 || stack_pointer&3!=0 {
+            return Err(JsValue::from_str("Initial stack pointer is invalid; device key may be incorrect."));
         }
         self.cpu.reset_from_vectors(&self.memory,0);
         self.display = DisplayController::new();
