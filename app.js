@@ -1,6 +1,7 @@
 'use strict';
 const $=id=>document.getElementById(id);
 const state={sprites:[],activeId:null,tool:'pencil',color:'#211c36',grid:true,zoom:10,history:[],redo:[],firmware:null,gallery:[]};
+const animationState={frames:[],selected:-1,timer:null};
 const starterPalette=['#211c36','#f4f2ff','#ff9fc8','#9bf2d2','#a99bff','#ffdb91','#5677a8','#e6f6ee'];
 function uid(){return 's'+Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
 function toast(s){const t=$('toast');t.textContent=s;t.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.classList.remove('show'),2800)}
@@ -262,3 +263,54 @@ function renderSpritePackagePage(reset=false) {
 if($('findSpritePackagesBtn')) $('findSpritePackagesBtn').addEventListener('click',scanParadiseSpritePackages);
 if($('spritePackageSearch')) $('spritePackageSearch').addEventListener('input',()=>renderSpritePackagePage(true));
 if($('spritePackageMore')) $('spritePackageMore').addEventListener('click',()=>renderSpritePackagePage(false));
+
+
+/* Lightweight frame-by-frame animation timeline */
+function cloneAnimationFrame(s) { return {name:s.name,width:s.width,height:s.height,pixels:[...s.pixels],palette:[...s.palette]}; }
+function updateAnimationCount() { $('animationFrameCount').textContent=animationState.frames.length+' frame'+(animationState.frames.length===1?'':'s'); }
+function stopAnimation() { if(animationState.timer){clearInterval(animationState.timer);animationState.timer=null} const b=$('animationPlay');if(b)b.textContent='▶ Play'; }
+function drawAnimationFrame(frame,canvas) {
+ const ctx=canvas.getContext('2d');canvas.width=frame.width;canvas.height=frame.height;const im=ctx.createImageData(frame.width,frame.height);
+ for(let i=0;i<frame.pixels.length;i++){const color=frame.pixels[i],k=i*4;if(!color){im.data[k+3]=0;continue}const hex=color.replace('#','');im.data[k]=parseInt(hex.slice(0,2),16)||0;im.data[k+1]=parseInt(hex.slice(2,4),16)||0;im.data[k+2]=parseInt(hex.slice(4,6),16)||0;im.data[k+3]=255}
+ ctx.putImageData(im,0,0);
+}
+function renderAnimationStrip() {
+ const strip=$('animationFrameStrip');strip.innerHTML='';
+ if(!animationState.frames.length){strip.innerHTML='<div class="empty-state">No animation frames yet. Add your current sprite to begin.</div>';updateAnimationCount();return}
+ animationState.frames.forEach((frame,i)=>{const card=document.createElement('button');card.type='button';card.className='animation-frame'+(i===animationState.selected?' selected':'');card.title='Select frame '+(i+1);
+ const cv=document.createElement('canvas');cv.width=frame.width;cv.height=frame.height;drawAnimationFrame(frame,cv);const thumb=document.createElement('span');thumb.className='animation-thumb';thumb.append(cv);
+ const label=document.createElement('b');label.textContent='Frame '+(i+1);const dims=document.createElement('small');dims.textContent=frame.width+'×'+frame.height;card.append(thumb,label,dims);
+ card.addEventListener('click',()=>{stopAnimation();animationState.selected=i;loadAnimationFrame(i);renderAnimationStrip()});strip.append(card)});
+ updateAnimationCount();
+}
+function loadAnimationFrame(index) {
+ const frame=animationState.frames[index];if(!frame)return;let s=active();
+ if(!s){createSprite(frame.name,frame.width,frame.height,[...frame.pixels],[...frame.palette]);return}
+ snap();s.name=frame.name||'Animation Frame '+(index+1);s.width=frame.width;s.height=frame.height;s.pixels=[...frame.pixels];s.palette=[...frame.palette];
+ $('spriteName').value=s.name;$('spriteWidth').value=s.width;$('spriteHeight').value=s.height;renderAll();$('animationPreviewLabel').textContent='Frame '+(index+1)+' of '+animationState.frames.length;drawAnimationFrame(frame,$('animationPreviewCanvas'));
+}
+function addAnimationFrame() {
+ const s=active();if(!s)return toast('Create or select a sprite first');animationState.frames.push(cloneAnimationFrame(s));animationState.selected=animationState.frames.length-1;stopAnimation();renderAnimationStrip();drawAnimationFrame(animationState.frames[animationState.selected],$('animationPreviewCanvas'));$('animationPreviewLabel').textContent='Frame '+(animationState.selected+1)+' ready';
+}
+function updateAnimationFrame() {
+ const s=active();if(!s)return toast('Create or select a sprite first');if(animationState.selected<0||!animationState.frames[animationState.selected])return toast('Select or add an animation frame first');
+ animationState.frames[animationState.selected]=cloneAnimationFrame(s);renderAnimationStrip();drawAnimationFrame(animationState.frames[animationState.selected],$('animationPreviewCanvas'));toast('Animation frame updated');
+}
+function playAnimation() {
+ if(animationState.frames.length<2)return toast('Add at least two frames to play an animation');if(animationState.timer){stopAnimation();return}
+ const fps=Math.max(1,Number($('animationFps').value)||4);let i=animationState.selected>=0?animationState.selected:0;$('animationPlay').textContent='■ Stop';
+ const tick=()=>{const frame=animationState.frames[i];drawAnimationFrame(frame,$('animationPreviewCanvas'));$('animationPreviewLabel').textContent='Playing frame '+(i+1)+' / '+animationState.frames.length;animationState.selected=i;renderAnimationStrip();i=(i+1)%animationState.frames.length};
+ tick();animationState.timer=setInterval(tick,1000/fps);
+}
+function exportAnimationJson() {
+ if(!animationState.frames.length)return toast('Add at least one animation frame first');
+ const payload={format:'paradise-mod-studio-animation',version:1,fps:Number($('animationFps').value)||4,frames:animationState.frames.map(f=>({name:f.name,width:f.width,height:f.height,pixels:f.pixels,palette:f.palette}))};
+ exportBlob(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),'paradise-animation.json');
+}
+$('animationAddFrame').addEventListener('click',addAnimationFrame);
+$('animationUpdateFrame').addEventListener('click',updateAnimationFrame);
+$('animationPrevFrame').addEventListener('click',()=>{if(!animationState.frames.length)return;stopAnimation();animationState.selected=(animationState.selected-1+animationState.frames.length)%animationState.frames.length;loadAnimationFrame(animationState.selected);renderAnimationStrip()});
+$('animationNextFrame').addEventListener('click',()=>{if(!animationState.frames.length)return;stopAnimation();animationState.selected=(animationState.selected+1)%animationState.frames.length;loadAnimationFrame(animationState.selected);renderAnimationStrip()});
+$('animationPlay').addEventListener('click',playAnimation);
+$('animationExport').addEventListener('click',exportAnimationJson);
+$('animationFps').addEventListener('input',e=>{$('animationFpsValue').textContent=e.target.value;if(animationState.timer){stopAnimation();playAnimation()}});
