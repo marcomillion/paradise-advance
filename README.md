@@ -5,11 +5,11 @@ A local-first browser workbench for inspecting Tamagotchi Paradise firmware and 
 ## What works
 
 - **Sprite Studio:** import PNGs or Studio JSON projects, create sprites up to 256 × 256, draw/erase/fill/pick colours, flip, resize, undo/redo, and export PNG or project JSON.
-- **Local workspace recovery:** sprites, gallery drafts, editor colour, grid, zoom, and the active sprite are saved in this browser's local storage. Firmware bytes and device keys are not saved there.
+- **Local workspace recovery:** sprites, gallery drafts, editor colour, grid, zoom, and the active sprite are saved in this browser's local storage. Export/import a workspace backup to preserve multiple sprites, drafts, preferences, and animation frames. Firmware bytes and device keys are not saved there.
 - **Animation timeline:** assemble sprite frames, preview playback, and export/import animation JSON.
 - **Firmware Lab:** inspect a local dump's header and SHA-256, view a coarse byte-region map, scan experimental bitmap candidates, and scan documented sprite-package layouts for decodable frames/subimages.
 - **Preview Lab:** loads the compiled WebAssembly core, inspects supported 16 MiB Sonix dumps, and exposes experimental CPU step/run controls and input buttons.
-- **Local Gallery:** collect drafts and reopen them in Sprite Studio. This is a local gallery, not a public sharing service.
+- **Local Gallery:** collect drafts, reopen them in Sprite Studio, export PNG/project JSON, or remove drafts. This is a local gallery, not a public sharing service.
 
 ## Run locally
 
