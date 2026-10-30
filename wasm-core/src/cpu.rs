@@ -4,6 +4,32 @@
 
 use crate::memory::MemoryStorage;
 
+fn thumb_expand_imm_c(imm12:u32,carry_in:bool)->(u32,bool) {
+    if (imm12>>10)&3==0 {
+        let imm8=imm12&0xFF;
+        let value=match (imm12>>8)&3 {
+            0=>imm8,
+            1=>(imm8<<16)|imm8,
+            2=>(imm8<<24)|(imm8<<8),
+            _=>(imm8<<24)|(imm8<<16)|(imm8<<8)|imm8,
+        };
+        (value,carry_in)
+    } else {
+        let unrotated=0x80|(imm12&0x7F);
+        let rotate=(imm12>>7)&0x1F;
+        let value=unrotated.rotate_right(rotate);
+        (value,value>>31!=0)
+    }
+}
+fn shift_c(value:u32,amount:u32,kind:u32,carry_in:bool)->(u32,bool) {
+    match kind {
+        0=>if amount==0 {(value,carry_in)} else if amount<32 {(value<<amount,(value>>(32-amount))&1!=0)} else if amount==32 {(0,value&1!=0)} else {(0,false)},
+        1=>{let n=if amount==0 {32}else{amount};if n<32 {(value>>n,(value>>(n-1))&1!=0)} else if n==32 {(0,value>>31!=0)} else {(0,false)}},
+        2=>{let n=if amount==0 {32}else{amount};if n<32 {(((value as i32)>>n) as u32,(value>>(n-1))&1!=0)} else { (if value as i32<0 {u32::MAX}else{0},value>>31!=0) }},
+        _=>if amount==0 {(value,carry_in)} else {let n=amount%32;if n==0 {(value,value>>31!=0)} else {let result=value.rotate_right(n);(result,result>>31!=0)}},
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CpuFault { UnsupportedInstruction(u16), InvalidExecutionAddress(u32), Halted }
 
@@ -33,6 +59,45 @@ impl ThumbCpu {
         let second=m.read_u8(pc.wrapping_add(2)) as u16 | ((m.read_u8(pc.wrapping_add(3)) as u16)<<8);
         let op1=first; let op2=second;
         self.r[15]=pc.wrapping_add(4);
+        // Thumb-2 shifted-register and modified-immediate data-processing operations.
+        let is_shifted=(op1&0xFE00)==0xEA00 || (op1&0xFE00)==0xEB00;
+        let is_modified_imm=(op1&0xFA00)==0xF000 && (op2&0x8000)==0;
+        if is_shifted || is_modified_imm {
+            let rn=(op1&0xF) as usize;
+            let rd=((op2>>8)&0xF) as usize;
+            let operation=(op1>>5)&0xF;
+            let set_flags=op1&0x10!=0;
+            let value_n=if rn==15 {0}else{self.r[rn]};
+            let (value_2,shifter_c)=if is_modified_imm {
+                let imm12=(((op1>>10)&1) as u32)<<11|(((op2>>12)&7) as u32)<<8|(op2&0xFF) as u32;
+                thumb_expand_imm_c(imm12,self.c)
+            } else {
+                let rm=(op2&0xF) as usize;
+                let amount=((((op2>>12)&7)<<2)|((op2>>6)&3)) as u32;
+                let kind=((op2>>4)&3) as u32;
+                shift_c(self.r[rm],amount,kind,self.c)
+            };
+            let mut carry=shifter_c;let mut overflow=self.v;
+            let result=match operation {
+                0=>value_n&value_2, // AND / TST
+                1=>value_n&!value_2, // BIC
+                2=>value_n|value_2, // ORR / MOV
+                3=>value_n|!value_2, // ORN / MVN
+                4=>value_n^value_2, // EOR / TEQ
+                8=>{let r=value_n.wrapping_add(value_2);carry=(value_n as u64+value_2 as u64)>u32::MAX as u64;overflow=(!(value_n^value_2)&(value_n^r)&0x8000_0000)!=0;r},
+                10=>{let sum=value_n as u64+value_2 as u64+self.c as u64;let r=sum as u32;carry=sum>u32::MAX as u64;overflow=(!(value_n^value_2)&(value_n^r)&0x8000_0000)!=0;r},
+                11=>{let borrow=(!self.c) as u32;let r=value_n.wrapping_sub(value_2).wrapping_sub(borrow);carry=(value_n as u64)>=(value_2 as u64+borrow as u64);overflow=((value_n^value_2)&(value_n^r)&0x8000_0000)!=0;r},
+                13=>{let r=value_n.wrapping_sub(value_2);carry=value_n>=value_2;overflow=((value_n^value_2)&(value_n^r)&0x8000_0000)!=0;r},
+                14=>{let r=value_2.wrapping_sub(value_n);carry=value_2>=value_n;overflow=((value_2^value_n)&(value_2^r)&0x8000_0000)!=0;r},
+                _=>{let f=CpuFault::UnsupportedInstruction(op1);self.halted=true;self.last_fault=Some(f);return Err(f);}
+            };
+            let compare_only=rd==15 && matches!(operation,0|4|8|13);
+            if !compare_only { if rd==15 {self.r[15]=result&!1;} else {self.r[rd]=result;} }
+            if set_flags || compare_only {
+                self.set_nz(result);self.c=carry;self.v=overflow;
+            }
+            self.instructions=self.instructions.wrapping_add(1);return Ok(());
+        }
         // Multiply, multiply-accumulate, and divide forms used by compiled C code.
         if (op1&0xFF80)==0xFB00 || (op1&0xFF80)==0xFB80 {
             let rn=(op1&0xF) as usize;
@@ -589,6 +654,16 @@ mod tests {
         let mut c=ThumbCpu::new(); c.r[15]=0; c.r[1]=0x1000;
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[0],0x1234); assert_eq!(c.r[15],4);
+    }
+    #[test]
+    fn executes_thumb2_mov_immediate_and_orr_register() {
+        let mut m=MemoryStorage::new();
+        // MOV.W r0, #0xFF; ORR.W r2, r0, r1
+        m.write_u8(0,0x4F);m.write_u8(1,0xF0);m.write_u8(2,0xFF);m.write_u8(3,0x00);
+        m.write_u8(4,0x40);m.write_u8(5,0xEA);m.write_u8(6,0x02);m.write_u8(7,0x02);
+        let mut c=ThumbCpu::new();c.r[15]=0;c.r[1]=0x100;
+        assert!(c.step(&mut m).is_ok());assert_eq!(c.r[0],0xFF);
+        assert!(c.step(&mut m).is_ok());assert_eq!(c.r[2],0x1FF);
     }
     #[test]
     fn executes_thumb2_multiply_and_unsigned_divide() {
