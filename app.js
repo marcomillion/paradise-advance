@@ -169,7 +169,7 @@ function scanParadiseSpritePackages() {
  if(search) search.disabled=!packages.length;
  $('spritePackageCount').textContent=packages.length+' package'+(packages.length===1?'':'s')+' found';
  $('spritePackageStatus').textContent=packages.length
-  ? 'Found '+packages.length+' structurally valid sprite package(s). Preview cards decode actual indexed/direct-color pixels, including supported RLE and XOR flags.'
+  ? 'Found '+packages.length+' candidate package(s), including '+deepFound+' from the broader scan. Categories are inferred from dimensions and frame counts, not official names; review previews because the firmware layout may contain assets the scanner cannot yet identify.'
   : 'No documented sprite packages found in this file. Confirm that this is a complete Paradise flash dump.';
  renderSpritePackagePage(true);
 }
@@ -314,6 +314,7 @@ function renderSpritePackagePage(reset=false) {
 }
 if($('findSpritePackagesBtn')) $('findSpritePackagesBtn').addEventListener('click',scanParadiseSpritePackages);
 if($('spritePackageSearch')) $('spritePackageSearch').addEventListener('input',()=>renderSpritePackagePage(true));
+if($('spriteCategoryFilter')) $('spriteCategoryFilter').addEventListener('change',()=>renderSpritePackagePage(true));
 if($('spritePackageMore')) $('spritePackageMore').addEventListener('click',()=>renderSpritePackagePage(false));
 
 
