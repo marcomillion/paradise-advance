@@ -1,0 +1,36 @@
+name: WASM core checks
+
+on:
+  push:
+    paths:
+      - "wasm-core/**"
+      - ".github/workflows/wasm-core.yml"
+  pull_request:
+    paths:
+      - "wasm-core/**"
+      - ".github/workflows/wasm-core.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-tests:
+    name: Native unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run display component tests
+        run: cargo test --manifest-path wasm-core/Cargo.toml
+
+  wasm-build:
+    name: WebAssembly compile check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Compile core for the browser
+        run: cargo build --manifest-path wasm-core/Cargo.toml --target wasm32-unknown-unknown --release
