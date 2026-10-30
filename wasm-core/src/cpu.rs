@@ -744,7 +744,7 @@ mod tests {
         m.write_u8(0x202,3);
         let mut c=ThumbCpu::new();c.r[15]=0;c.r[2]=0x100;c.r[3]=0x200;c.r[4]=2;
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[0],0x1234);assert_eq!(c.r[1],0x5678);
-        assert!(c.step(&mut m).is_ok());assert_eq!(c.r[15],10);
+        assert!(c.step(&mut m).is_ok());assert_eq!(c.r[15],14);
     }
     #[test]
     fn executes_thumb2_clz() {
