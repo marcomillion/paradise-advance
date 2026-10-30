@@ -150,3 +150,5 @@
  .device-controls{gap:16px}
  .device-button{width:31px;height:31px}
 }
+
+.emulator-external-link{display:flex;align-items:center;justify-content:center;text-align:center;text-decoration:none;margin:10px 0}
