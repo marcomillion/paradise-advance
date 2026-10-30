@@ -22,6 +22,8 @@ impl ThumbCpu {
         self.halted=false; self.last_fault=None; self.instructions=0; self.in_irq=false; self.primask=false; self.itstate=0;
     }
     fn set_nz(&mut self, value:u32) { self.n=value>>31!=0; self.z=value==0; }
+    fn set_add_flags(&mut self,a:u32,b:u32,result:u32) { self.set_nz(result); self.c=(a as u64+b as u64)>u32::MAX as u64; self.v=(!(a^b)&(a^result)&0x8000_0000)!=0; }
+    fn set_sub_flags(&mut self,a:u32,b:u32,result:u32) { self.set_nz(result); self.c=a>=b; self.v=((a^b)&(a^result)&0x8000_0000)!=0; }
     fn condition(&self, cond:u16)->bool { match cond {
         0=>self.z,1=>!self.z,2=>self.c,3=>!self.c,4=>self.n,5=>!self.n,
         6=>self.v,7=>!self.v,8=>self.c&&!self.z,9=>!self.c||self.z,
@@ -105,9 +107,9 @@ impl ThumbCpu {
             0xB672 => { self.primask=true; },  // CPSID i
             0xBE00..=0xBEFF => { self.halted=true; },
             0x2000..=0x27FF => { let d=((op>>8)&7) as usize; let val=(op&0xff) as u32; self.r[d]=val; self.set_nz(val); },
-            0x2800..=0x2FFF => { let val=self.r[((op>>8)&7) as usize].wrapping_sub((op&0xff) as u32); self.set_nz(val); self.c=self.r[((op>>8)&7) as usize]>=(op&0xff) as u32; },
-            0x3000..=0x37FF => { let d=((op>>8)&7) as usize; let (val,carry)=self.r[d].overflowing_add((op&0xff) as u32); self.r[d]=val; self.set_nz(val); self.c=carry; },
-            0x3800..=0x3FFF => { let d=((op>>8)&7) as usize; let (val,borrow)=self.r[d].overflowing_sub((op&0xff) as u32); self.r[d]=val; self.set_nz(val); self.c=!borrow; },
+            0x2800..=0x2FFF => { let a=self.r[((op>>8)&7) as usize];let b=(op&0xff) as u32;let val=a.wrapping_sub(b);self.set_sub_flags(a,b,val); },
+            0x3000..=0x37FF => { let d=((op>>8)&7) as usize;let a=self.r[d];let b=(op&0xff) as u32;let val=a.wrapping_add(b);self.r[d]=val;self.set_add_flags(a,b,val); },
+            0x3800..=0x3FFF => { let d=((op>>8)&7) as usize;let a=self.r[d];let b=(op&0xff) as u32;let val=a.wrapping_sub(b);self.r[d]=val;self.set_sub_flags(a,b,val); },
             0x0000..=0x07FF => { let source=((op>>3)&7) as usize; let shift=((op>>6)&31) as u32; let val=self.r[source]<<shift; self.r[rd]=val; self.set_nz(val); self.c=if shift==0 {self.c} else {(self.r[source]>>(32-shift))&1!=0}; },
             0x0800..=0x0FFF => { let source=((op>>3)&7) as usize; let shift=((op>>6)&31) as u32; let val=if shift==0 {0} else {self.r[source]>>shift}; self.r[rd]=val; self.set_nz(val); self.c=if shift==0 {self.r[source]>>31!=0} else {(self.r[source]>>(shift-1))&1!=0}; },
             0x1000..=0x17FF => {
@@ -120,7 +122,7 @@ impl ThumbCpu {
                 self.r[rd]=value; self.set_nz(value);
                 self.c=if amount==32 {source<0} else {((self.r[source_reg]>>(amount-1))&1)!=0};
             },
-            0x1800..=0x1FFF => { let imm=op&0x0400!=0; let sub=op&0x0200!=0; let a=self.r[rn]; let b=if imm {(op>>6&7) as u32} else {self.r[rm]}; let (val,carry)=if sub {a.overflowing_sub(b)} else {a.overflowing_add(b)}; self.r[rd]=val; self.set_nz(val); self.c=if sub {!carry} else {carry}; },
+            0x1800..=0x1FFF => { let imm=op&0x0400!=0;let sub=op&0x0200!=0;let a=self.r[rn];let b=if imm {(op>>6&7) as u32}else{self.r[rm]};let val=if sub {a.wrapping_sub(b)}else{a.wrapping_add(b)};self.r[rd]=val;if sub {self.set_sub_flags(a,b,val)}else{self.set_add_flags(a,b,val)}; },
             0x4000..=0x43FF => {
                 let alu=(op>>6)&15; let a=self.r[rd]; let b=self.r[rm];
                 match alu {
@@ -129,12 +131,12 @@ impl ThumbCpu {
                     2=>{let shift=b&0xff;let v=a.wrapping_shl(shift);self.r[rd]=v;self.set_nz(v);if shift!=0 {self.c=(a>>(32-shift))&1!=0;}},
                     3=>{let shift=b&0xff;let v=if shift>=32 {0}else{a>>shift};self.r[rd]=v;self.set_nz(v);if shift!=0 {self.c=if shift>32 {false}else{(a>>(shift-1))&1!=0};}},
                     4=>{let shift=b&0xff;let v=if shift>=32 {if (a as i32)<0 {u32::MAX}else{0}}else{((a as i32)>>shift) as u32};self.r[rd]=v;self.set_nz(v);},
-                    5=>{let (tmp,c1)=a.overflowing_add(b);let (v,c2)=tmp.overflowing_add(self.c as u32);self.r[rd]=v;self.set_nz(v);self.c=c1||c2;},
-                    6=>{let (tmp,c1)=a.overflowing_sub(b);let (v,c2)=tmp.overflowing_sub((!self.c) as u32);self.r[rd]=v;self.set_nz(v);self.c=!(c1||c2);},
+                    5=>{let sum=a as u64+b as u64+self.c as u64;let v=sum as u32;self.r[rd]=v;self.set_nz(v);self.c=sum>u32::MAX as u64;self.v=(!(a^b)&(a^v)&0x8000_0000)!=0;},
+                    6=>{let borrow=(!self.c) as u32;let v=a.wrapping_sub(b).wrapping_sub(borrow);self.r[rd]=v;self.set_nz(v);self.c=(a as u64)>=(b as u64+borrow as u64);self.v=((a^b)&(a^v)&0x8000_0000)!=0;},
                     8=>{self.set_nz(a&b);},
-                    9=>{let v=0u32.wrapping_sub(b);self.r[rd]=v;self.set_nz(v);self.c=b==0;},
-                    10=>{self.set_nz(a.wrapping_sub(b));self.c=a>=b;},
-                    11=>{let v=a.wrapping_add(b);self.set_nz(v);self.c=(v as u64)<(a as u64);},
+                    9=>{let v=0u32.wrapping_sub(b);self.r[rd]=v;self.set_sub_flags(0,b,v);},
+                    10=>{self.set_sub_flags(a,b,a.wrapping_sub(b));},
+                    11=>{self.set_add_flags(a,b,a.wrapping_add(b));},
                     12=>{let v=a|b;self.r[rd]=v;self.set_nz(v);},
                     13=>{let v=a.wrapping_mul(b);self.r[rd]=v;self.set_nz(v);},
                     14=>{let v=a&!b;self.r[rd]=v;self.set_nz(v);},
@@ -148,7 +150,7 @@ impl ThumbCpu {
                 let rd=((op&7)|((op>>4)&8)) as usize;
                 match opkind {
                     0=>{let v=self.r[rd].wrapping_add(self.r[rs]);if rd==15 {self.r[15]=v&!1;} else {self.r[rd]=v;}},
-                    1=>{let v=self.r[rd].wrapping_sub(self.r[rs]);self.set_nz(v);self.c=self.r[rd]>=self.r[rs];},
+                    1=>{let a=self.r[rd];let b=self.r[rs];self.set_sub_flags(a,b,a.wrapping_sub(b));},
                     2=>{let v=self.r[rs];if rd==15 {self.r[15]=v&!1;} else {self.r[rd]=v;}},
                     3=>{let target=self.r[rs];if op&0x0080!=0 {self.r[14]=next|1;}self.r[15]=target&!1;},
                     _=>{}
@@ -390,6 +392,17 @@ mod tests {
         assert!(c.step(&mut m).is_ok());
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[0],1); assert_eq!(c.r[15],4); assert_eq!(c.itstate,0);
+    }
+    #[test]
+    fn arithmetic_sets_signed_overflow_and_carry_flags() {
+        let mut m=MemoryStorage::new();
+        // ADDS r0, #1; CMP r0, #0x80
+        m.write_u8(0,0x01); m.write_u8(1,0x30);
+        m.write_u8(2,0x80); m.write_u8(3,0x28);
+        let mut c=ThumbCpu::new(); c.r[15]=0; c.r[0]=0x7FFF_FFFF;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[0],0x8000_0000); assert!(c.n); assert!(c.v);
+        assert!(c.step(&mut m).is_ok()); assert!(c.n); assert!(!c.v); assert!(!c.c);
     }
     #[test]
     fn cpsid_and_cpsie_control_interrupt_mask() {
