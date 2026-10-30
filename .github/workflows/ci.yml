@@ -23,7 +23,14 @@ jobs:
         run: |
           node --check app.js
           node --check emulator.js
-          node --check wasm-core/browser-worker.js
+          node --input-type=module --check < wasm-core/browser-worker.js
+          node --check playwright.config.js
+      - name: Install browser test dependencies
+        run: npm install
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run browser smoke tests
+        run: npm run test:e2e
       - name: Verify generated WASM package exists
         run: |
           test -s wasm-core/pkg/paradise_wasm_core.js
