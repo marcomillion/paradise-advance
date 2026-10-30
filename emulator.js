@@ -58,5 +58,6 @@
  document.addEventListener('paradise:device-input',e=>input(e.detail));
  document.addEventListener('keydown',e=>{if(!document.getElementById('view-emulator')?.classList.contains('active'))return;if(['ArrowUp','ArrowDown'].includes(e.key)){input({type:'dial',steps:e.key==='ArrowDown'?1:-1})}});
  setInterval(()=>{const now=Date.now(),elapsed=Math.min(60,(now-game.lastTick)/1000);game.lastTick=now;if(game.stage==='pet'&&game.screen!=='status'){game.hunger=Math.max(0,game.hunger-elapsed*.025);game.happy=Math.max(0,game.happy-elapsed*.018);game.clean=Math.max(0,game.clean-elapsed*.012)}draw();save()},900);
+ window.paradiseBrowserPetDraw=draw;
  draw();
 })();
