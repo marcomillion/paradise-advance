@@ -1,0 +1,13 @@
+# Node / Playwright
+node_modules/
+playwright-report/
+test-results/
+
+# Local build output
+dist/
+coverage/
+
+# Local-only firmware and device data
+firmware-dumps/
+*.tamasave
+*.devicekey
