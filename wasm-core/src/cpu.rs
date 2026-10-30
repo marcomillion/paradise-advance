@@ -736,8 +736,8 @@ mod tests {
     fn executes_thumb2_ldrd_and_tbb() {
         let mut m=MemoryStorage::new();
         // LDRD r0, r1, [r2]; TBB [r3, r4]
-        m.write_u8(0,0xD2);m.write_u8(1,0xE9);m.write_u8(2,0x01);m.write_u8(3,0x01);
-        m.write_u8(4,0xD3);m.write_u8(5,0xE8);m.write_u8(6,0x01);m.write_u8(7,0xF0);
+        m.write_u8(0,0xD2);m.write_u8(1,0xE9);m.write_u8(2,0x00);m.write_u8(3,0x01);
+        m.write_u8(4,0xD3);m.write_u8(5,0xE8);m.write_u8(6,0x04);m.write_u8(7,0xF0);
         m.write_u8(0x100,0x34);m.write_u8(0x101,0x12);m.write_u8(0x104,0x78);m.write_u8(0x105,0x56);
         m.write_u8(0x202,3);
         let mut c=ThumbCpu::new();c.r[15]=0;c.r[2]=0x100;c.r[3]=0x200;c.r[4]=2;
