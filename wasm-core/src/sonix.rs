@@ -100,6 +100,11 @@ mod tests {
         cipher.reverse();
         bytes[0x1000..0x1010].copy_from_slice(&cipher);
         assert_eq!(search_device_key_chunk(&bytes,device_key,1).unwrap(),Some(device_key));
+        // A candidate at the middle of a chunk is still found, and ranges that
+        // reach past u32::MAX are safely clamped to the 32-bit key space.
+        assert_eq!(search_device_key_chunk(&bytes,device_key-1,3).unwrap(),Some(device_key));
+        assert_eq!(search_device_key_chunk(&bytes,u32::MAX,2).unwrap(),None);
+        assert_eq!(search_device_key_chunk(&bytes,device_key,0).unwrap(),None);
     }
     #[test] fn parses_v3_encrypted_sonix_table() {
         let t=LoadTable::parse(&sample(),0).unwrap();
