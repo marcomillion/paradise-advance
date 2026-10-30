@@ -143,6 +143,28 @@ impl ThumbCpu {
             }
             self.instructions=self.instructions.wrapping_add(1);return Ok(());
         }
+        // MRS / MSR access to core special registers used by interrupt handlers.
+        if op1==0xF3EF && (op2&0xF000)==0x8000 {
+            let rd=((op2>>8)&0xF) as usize;let sysm=op2&0xFF;
+            let value=match sysm {
+                0=>((self.n as u32)<<31)|((self.z as u32)<<30)|((self.c as u32)<<29)|((self.v as u32)<<28),
+                3=>((self.n as u32)<<31)|((self.z as u32)<<30)|((self.c as u32)<<29)|((self.v as u32)<<28)|(1<<24)|((self.itstate as u32&3)<<25)|(((self.itstate as u32>>2)&0x3F)<<10),
+                8|9=>self.r[13],
+                16=>self.primask as u32,
+                _=>0,
+            };
+            self.r[rd]=value;self.instructions=self.instructions.wrapping_add(1);return Ok(());
+        }
+        if (op1&0xFFF0)==0xF380 && (op2&0xF000)==0x8000 {
+            let rn=(op1&0xF) as usize;let sysm=op2&0xFF;let value=self.r[rn];
+            match sysm {
+                0..=3=>{self.n=value&(1<<31)!=0;self.z=value&(1<<30)!=0;self.c=value&(1<<29)!=0;self.v=value&(1<<28)!=0;},
+                8|9=>self.r[13]=value&!3,
+                16=>self.primask=value&1!=0,
+                _=>{},
+            }
+            self.instructions=self.instructions.wrapping_add(1);return Ok(());
+        }
         // BFI/BFC/SBFX/UBFX bit-field operations.
         if (op1&0xFBF0)==0xF340 || (op1&0xFBF0)==0xF360 || (op1&0xFBF0)==0xF3C0 {
             let rn=(op1&0xF) as usize;
@@ -664,6 +686,16 @@ mod tests {
         let mut c=ThumbCpu::new();c.r[15]=0;c.r[1]=0x100;
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[0],0xFF);
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[2],0x1FF);
+    }
+    #[test]
+    fn executes_mrs_and_msr_primask() {
+        let mut m=MemoryStorage::new();
+        // MRS r0, PRIMASK; MSR PRIMASK, r1
+        m.write_u8(0,0xEF);m.write_u8(1,0xF3);m.write_u8(2,0x10);m.write_u8(3,0x80);
+        m.write_u8(4,0x81);m.write_u8(5,0xF3);m.write_u8(6,0x10);m.write_u8(7,0x88);
+        let mut c=ThumbCpu::new();c.r[15]=0;c.primask=true;c.r[1]=0;
+        assert!(c.step(&mut m).is_ok());assert_eq!(c.r[0],1);
+        assert!(c.step(&mut m).is_ok());assert!(!c.primask);
     }
     #[test]
     fn executes_thumb2_multiply_and_unsigned_divide() {
