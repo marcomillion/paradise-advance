@@ -305,7 +305,7 @@ mod browser_integration_tests {
         image[0x1000..0x1004].copy_from_slice(&0x1800_0002u32.to_le_bytes());
         image[0x1004..0x1008].copy_from_slice(&0x0000_0101u32.to_le_bytes());
 
-        let error = cpu.load_sonix_firmware(&image, 0).unwrap_err().as_string().unwrap();
+        let error = load_sonix_firmware_inner(&mut cpu, &image, 0).unwrap_err();
         assert!(error.contains("Initial stack pointer"));
         assert_eq!(cpu.memory.pram[0], 0xA5);
         assert_eq!(cpu.memory.flash[0], 0x5A);
