@@ -733,7 +733,7 @@ mod tests {
     #[test]
     fn unsupported_opcode_faults_explicitly() {
         let mut m=MemoryStorage::new();
-        m.write_u8(0,0x00); m.write_u8(1,0xF0);
+        m.write_u8(0,0xFF); m.write_u8(1,0xFF); m.write_u8(2,0xFF); m.write_u8(3,0xFF);
         let mut c=ThumbCpu::new(); c.r[15]=0;
         assert!(matches!(c.step(&mut m),Err(CpuFault::UnsupportedInstruction(_))));
         assert!(c.halted);
