@@ -433,6 +433,24 @@ mod tests {
         assert_eq!(c.r[14],0xFFFF_FFF9);
     }
     #[test]
+    fn systick_interrupt_enters_handler_and_returns_to_thread() {
+        let mut m=MemoryStorage::new();
+        m.pram[0..6].copy_from_slice(&[0x00,0xBF,0x00,0xBF,0x00,0xBF]);
+        m.pram[0x3C..0x40].copy_from_slice(&0x1000_0101u32.to_le_bytes());
+        m.flash[0x100..0x102].copy_from_slice(&0x4770u16.to_le_bytes());
+        m.write_u8(0xE000_E014,2);
+        m.write_u8(0xE000_E010,3); // SysTick ENABLE | TICKINT
+        let mut c=ThumbCpu::new(); c.r[13]=crate::memory::SRAM_BASE+crate::memory::SRAM_SIZE as u32;
+        c.r[15]=0;
+        assert!(c.step(&mut m).is_ok());
+        assert!(c.step(&mut m).is_ok());
+        assert!(c.step(&mut m).is_ok());
+        assert!(c.in_irq); assert_eq!(c.r[15],0x1000_0100);
+        assert!(c.step(&mut m).is_ok()); assert_eq!(c.r[15],0xFFFF_FFF8);
+        assert!(c.step(&mut m).is_ok());
+        assert!(!c.in_irq); assert_eq!(c.r[15],6);
+    }
+    #[test]
     fn dma_completion_irq_enters_handler_and_returns_to_thread() {
         let mut m=MemoryStorage::new();
         m.pram[0..2].copy_from_slice(&0xBF00u16.to_le_bytes()); // NOP
