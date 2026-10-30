@@ -65,3 +65,10 @@ The first source-level audit confirms the core can be separated, but it is not a
 6. Connect the Worker to `emulator.js`; only then change the status from “core not integrated” to “core running”.
 
 **Status of this audit:** source inspected; no WASM core has been ported or compiled yet. The browser still does not execute firmware.
+
+
+## Portable-core implementation started (2026-10-31)
+
+A separate `wasm-core/` crate has now been added. Its first component is a portable RGB565 display controller and a `wasm-bindgen` wrapper that exposes an RGBA framebuffer to browser code. It includes unit tests for framebuffer size, RGB565 colour conversion, out-of-bounds writes, and frame transfer. The crate includes the GPL-3.0 license because this display component is derived from Capybara.
+
+This is only the first hardware boundary; it is **not a bootable emulator**. The current environment has no Rust/Cargo toolchain, so the crate has not been compiled or tested here. The existing site still does not execute firmware. Next: establish a Rust build/CI path, then port and test the CPU + memory bus + Sonix loader/decryption as an integrated machine before connecting UI controls.
