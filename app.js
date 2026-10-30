@@ -88,7 +88,8 @@ function rotateDial(delta,source='pointer'){
 dial.addEventListener('pointermove',e=>{if(!dialDragging)return;const dx=e.clientX-dialLastX;dialLastX=e.clientX;if(dx)rotateDial(dx)});
 dial.addEventListener('pointerup',()=>dialDragging=false);dial.addEventListener('pointercancel',()=>dialDragging=false);
 dial.addEventListener('click',()=>reportDeviceInput('Zoom dial pressed · Confirm',{type:'button',button:'DIAL'}));
-dial.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();reportDeviceInput('Zoom dial pressed · Confirm',{type:'button',button:'DIAL',source:'keyboard'});}else if(e.key==='ArrowRight'||e.key==='ArrowUp'){e.preventDefault();e.stopPropagation();rotateDial(12,'keyboard')}else if(e.key==='ArrowLeft'||e.key==='ArrowDown'){e.preventDefault();e.stopPropagation();rotateDial(-12,'keyboard')}});
+dial.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();reportDeviceInput('Zoom dial pressed · Confirm',{type:'button',button:'DIAL',pressed:true,source:'keyboard'});}else if(e.key==='ArrowRight'||e.key==='ArrowUp'){e.preventDefault();e.stopPropagation();rotateDial(12,'keyboard')}else if(e.key==='ArrowLeft'||e.key==='ArrowDown'){e.preventDefault();e.stopPropagation();rotateDial(-12,'keyboard')}});
+ dial.addEventListener('keyup',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();reportDeviceInput('Zoom dial released',{type:'button',button:'DIAL',pressed:false,source:'keyboard'});}});
 const keyboardButtonMap={ArrowLeft:'C',ArrowRight:'A',Enter:'B',Escape:'C'};
  document.addEventListener('keydown',e=>{
   if(!$('view-emulator')?.classList.contains('active'))return;
