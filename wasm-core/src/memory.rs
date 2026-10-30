@@ -33,6 +33,7 @@ pub struct MemoryStorage {
     pub pram: Vec<u8>, pub boot_rom: Vec<u8>, pub sram: Vec<u8>,
     pub mailbox: Vec<u8>, pub flash: Vec<u8>,
     pub gpio_buttons: [bool; 3], pub dial_counter: i32,
+    pub dma_registers: [u32; 76], pub panel_frame: Option<Vec<u16>>,
 }
 impl MemoryStorage {
     pub fn new() -> Self {
@@ -42,7 +43,8 @@ impl MemoryStorage {
         boot_rom[0x40..0x46].copy_from_slice(&[0x00,0xBF,0x01,0x20,0xFE,0xE7]);
         Self { pram:vec![0;PRAM_SIZE], boot_rom, sram:vec![0;SRAM_SIZE],
             mailbox:vec![0;MAILBOX_SIZE], flash:vec![0xFF;FLASH_SIZE],
-            gpio_buttons:[false;3], dial_counter:0 }
+            gpio_buttons:[false;3], dial_counter:0,
+            dma_registers:[0;76], panel_frame:None }
     }
     pub fn load_pram(&mut self, bytes: &[u8]) {
         self.pram.fill(0);
@@ -86,6 +88,34 @@ impl MemoryStorage {
             self.read_u8(address.wrapping_add(2)),self.read_u8(address.wrapping_add(3))])
     }
     pub fn write_u8(&mut self, address: u32, value: u8) -> bool {
+        if (0x4000_F000..0x4000_F130).contains(&address) {
+            let offset=address-0x4000_F000;
+            let word=(offset/4) as usize;
+            let shift=(offset&3)*8;
+            let mask=!(0xffu32<<shift);
+            self.dma_registers[word]=(self.dma_registers[word]&mask)|((value as u32)<<shift);
+            // Channel CTRL is acted on only after its complete word is written.
+            if offset>=0x100 && (offset-0x100)%0x20==0x03 {
+                let channel=((offset-0x100)/0x20) as usize;
+                let ctrl_word=(0x100/4)+channel*8;
+                if self.dma_registers[ctrl_word]&1!=0 {
+                    let source=self.dma_registers[ctrl_word+2];
+                    let destination=self.dma_registers[ctrl_word+3];
+                    let units=(self.dma_registers[ctrl_word+5]&0x003F_FFFF).min(16_384) as usize;
+                    if destination==0x4000_E01C && units>0 {
+                        let mut pixels=Vec::with_capacity(units);
+                        for i in 0..units {
+                            let addr=source.wrapping_add((i*2) as u32);
+                            pixels.push(u16::from_le_bytes([self.read_u8(addr),self.read_u8(addr.wrapping_add(1))]));
+                        }
+                        self.panel_frame=Some(pixels);
+                    }
+                    self.dma_registers[ctrl_word]&=!1;
+                    self.dma_registers[0]|=1<<channel;
+                }
+            }
+            return true;
+        }
         if (0x4003_1004..0x4003_1008).contains(&address) {
             let shift=((address-0x4003_1004)*8) as u32;
             let mask=!(0xffu32<<shift);
@@ -116,6 +146,18 @@ mod tests {
         assert_eq!(region_for(XIP_BASE),RegionKind::Xip);
         assert_eq!(region_for(FLASH_BASE),RegionKind::Flash);
         assert_eq!(region_for(0x4000_0000),RegionKind::Unmapped);
+    }
+    #[test]
+    fn dma_channel_copies_rgb565_words_to_panel_data_register() {
+        let mut m=MemoryStorage::new();
+        m.sram[0x100..0x104].copy_from_slice(&[0xE0,0x07,0x1F,0x00]);
+        fn wr32(m:&mut MemoryStorage,a:u32,v:u32){for i in 0..4 {m.write_u8(a+i,(v>>(8*i)) as u8);}}
+        wr32(&mut m,0x4000_F108,SRAM_BASE+0x100);
+        wr32(&mut m,0x4000_F10C,0x4000_E01C);
+        wr32(&mut m,0x4000_F114,2);
+        wr32(&mut m,0x4000_F100,1);
+        assert_eq!(m.panel_frame,Some(vec![0x07E0,0x001F]));
+        assert_eq!(m.dma_registers[0x100/4]&1,0);
     }
     #[test]
     fn gpio_buttons_are_active_low_and_dial_is_readable() {
