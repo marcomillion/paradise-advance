@@ -63,6 +63,12 @@ impl ThumbCpu {
         let second=m.read_u8(pc.wrapping_add(2)) as u16 | ((m.read_u8(pc.wrapping_add(3)) as u16)<<8);
         let op1=first; let op2=second;
         self.r[15]=pc.wrapping_add(4);
+        // CLREX clears the local exclusive monitor without touching memory.
+        if op1==0xF3BF && op2==0x8F2F {
+            self.exclusive_address=None;
+            self.instructions=self.instructions.wrapping_add(1);
+            return Ok(());
+        }
         // Table branch: TBB / TBH.
         if (op1&0xFFF0)==0xE8D0 && (op2&0xFFE0)==0xF000 {
             let rn=(op1&0xF) as usize;let rm=(op2&0xF) as usize;
@@ -945,6 +951,24 @@ mod tests {
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[2],0);
         assert_eq!(m.read_u32(0x100),0xABCD_1234);
     }
+    #[test]
+    fn clrex_clears_exclusive_reservation_before_strex() {
+        let mut m=MemoryStorage::new();
+        // LDREX r0, [r1]; CLREX; STREX r2, r3, [r1]
+        m.pram[0..4].copy_from_slice(&[0x51,0xE8,0x00,0x0F]);
+        m.pram[4..8].copy_from_slice(&[0xBF,0xF3,0x2F,0x8F]);
+        m.pram[8..12].copy_from_slice(&[0x41,0xE8,0x00,0x32]);
+        let mut c=ThumbCpu::new(); c.r[15]=0; c.r[1]=0x100; c.r[3]=0xABCD_1234;
+        m.write_u8(0x100,0x78); m.write_u8(0x101,0x56);
+        m.write_u8(0x102,0x34); m.write_u8(0x103,0x12);
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[0],0x1234_5678);
+        assert!(c.step(&mut m).is_ok());
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[2],1);
+        assert_eq!(m.read_u32(0x100),0x1234_5678);
+    }
+
     #[test]
     fn executes_thumb2_ldrd_and_tbb() {
         let mut m=MemoryStorage::new();
