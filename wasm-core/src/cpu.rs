@@ -282,8 +282,13 @@ impl ThumbCpu {
                 return Ok(());
             }
         }
+        let saved_flags=(self.n,self.z,self.c,self.v);
+        let preserve_flags=in_it && (self.itstate&0x7)!=0;
         let result=self.step_decoded(m);
-        if in_it && result.is_ok() { self.advance_itstate(); }
+        if result.is_ok() {
+            if preserve_flags { (self.n,self.z,self.c,self.v)=saved_flags; }
+            if in_it { self.advance_itstate(); }
+        }
         result
     }
     pub fn step(&mut self,m:&mut MemoryStorage)->Result<(),CpuFault> {
@@ -349,6 +354,20 @@ mod tests {
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[2],0x7856_3412);
     }
+    #[test]
+    fn it_block_preserves_flags_until_last_instruction() {
+        let mut m=MemoryStorage::new();
+        m.pram[0..2].copy_from_slice(&0xBF04u16.to_le_bytes()); // ITT EQ
+        m.pram[2..4].copy_from_slice(&0x2001u16.to_le_bytes()); // MOVS r0, #1
+        m.pram[4..6].copy_from_slice(&0x2102u16.to_le_bytes()); // MOVS r1, #2
+        let mut c=ThumbCpu::new(); c.r[15]=0; c.z=true;
+        assert!(c.step(&mut m).is_ok());
+        assert!(c.step(&mut m).is_ok());
+        assert!(c.z); assert_eq!(c.r[0],1);
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[1],2); assert!(!c.z); assert_eq!(c.itstate,0);
+    }
+
     #[test]
     fn it_eq_skips_instruction_when_condition_is_false() {
         let mut m=MemoryStorage::new();
