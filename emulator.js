@@ -60,6 +60,25 @@
       worker.postMessage({ id, type, payload });
     }));
   }
+  async function refreshFirmwareFrame() {
+    if (!cpuLoaded) return;
+    const frame = await request('frame');
+    const canvas = $('previewCanvas');
+    if (!canvas || !frame || !frame.rgba) return;
+    canvas.width = frame.width;
+    canvas.height = frame.height;
+    const ctx = canvas.getContext('2d');
+    const pixels = frame.rgba instanceof Uint8Array ? frame.rgba : new Uint8Array(frame.rgba);
+    ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels), frame.width, frame.height), 0, 0);
+    const empty = $('previewEmpty');
+    if (empty) empty.style.display = 'none';
+    canvas.style.imageRendering = 'pixelated';
+    const scale = Number($('previewScale')?.value || 3);
+    canvas.style.width = (frame.width * scale) + 'px';
+    canvas.style.height = (frame.height * scale) + 'px';
+    if (inputStatus) inputStatus.textContent = 'Experimental SRAM framebuffer snapshot · display DMA and physical inputs are not yet emulated.';
+  }
+  window.paradiseBrowserPetDraw = () => { refreshFirmwareFrame().catch(() => {}); };
   function formatHex(value) {
     return '0x' + (Number(value) >>> 0).toString(16).toUpperCase().padStart(8, '0');
   }
@@ -103,6 +122,7 @@
       await request('create-cpu');
       const result = await request('load-firmware', { bytes: firmwareBytes, deviceKey: key });
       cpuLoaded = true;
+      await refreshFirmwareFrame();
       $('emulatorStepBtn').disabled = false;
       $('emulatorRunBtn').disabled = false;
       setStatus('CPU loaded · not yet a complete emulator',
@@ -119,7 +139,8 @@
     if (!cpuLoaded) return;
     try {
       const r = await request('step');
-      setStatus('CPU instruction executed', 'Instructions: ' + r.instructions + ' · PC ' + formatHex(r.pc) + ' · halted: ' + r.halted + (r.halted ? ' · fault: ' + r.fault : '') + '. The screen is not yet connected to CPU/DMA output.');
+      await refreshFirmwareFrame();
+      setStatus('CPU instruction executed', 'Instructions: ' + r.instructions + ' · PC ' + formatHex(r.pc) + ' · halted: ' + r.halted + (r.halted ? ' · fault: ' + r.fault : '') + '. The shown image is only an SRAM framebuffer snapshot; DMA/display hardware is not emulated yet.');
       if (r.halted) { $('emulatorStepBtn').disabled = true; $('emulatorRunBtn').disabled = true; }
     } catch (error) {
       setStatus('CPU stopped', error.message || String(error));
@@ -130,7 +151,8 @@
     if (!cpuLoaded) return;
     try {
       const r = await request('run', { count: 1000 });
-      setStatus('CPU run batch finished', 'Executed ' + r.executed + ' instruction(s) · total ' + r.instructions + ' · PC ' + formatHex(r.pc) + ' · halted: ' + r.halted + (r.halted ? ' · fault: ' + r.fault : '') + '. Display/peripheral integration remains in progress.');
+      await refreshFirmwareFrame();
+      setStatus('CPU run batch finished', 'Executed ' + r.executed + ' instruction(s) · total ' + r.instructions + ' · PC ' + formatHex(r.pc) + ' · halted: ' + r.halted + (r.halted ? ' · fault: ' + r.fault : '') + '. The shown image is an SRAM snapshot, not verified LCD output.');
       if (r.halted) { $('emulatorStepBtn').disabled = true; $('emulatorRunBtn').disabled = true; }
     } catch (error) {
       setStatus('CPU stopped', error.message || String(error));
