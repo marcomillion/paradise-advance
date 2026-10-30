@@ -41,6 +41,12 @@ fn tables() -> &'static Tables {
     })
 }
 
+/// Fast multiplication by x in AES's GF(2^8), modulo 0x11b.
+#[inline]
+fn xtime(value: u8) -> u8 {
+    (value << 1) ^ if value & 0x80 != 0 { 0x1b } else { 0 }
+}
+
 /// Multiplication dans GF(2^8) modulo le polynome AES 0x11b.
 fn gmul(mut a: u8, mut b: u8) -> u8 {
     let mut r = 0u8;
@@ -136,11 +142,21 @@ impl Aes {
             if r != self.rounds {
                 let p = s;
                 for c in 0..4 {
-                    let col = &p[c * 4..c * 4 + 4];
-                    s[c * 4] = gmul(col[0], 2) ^ gmul(col[1], 3) ^ col[2] ^ col[3];
-                    s[c * 4 + 1] = col[0] ^ gmul(col[1], 2) ^ gmul(col[2], 3) ^ col[3];
-                    s[c * 4 + 2] = col[0] ^ col[1] ^ gmul(col[2], 2) ^ gmul(col[3], 3);
-                    s[c * 4 + 3] = gmul(col[0], 3) ^ col[1] ^ col[2] ^ gmul(col[3], 2);
+                    let i = c * 4;
+                    let a0 = p[i];
+                    let a1 = p[i + 1];
+                    let a2 = p[i + 2];
+                    let a3 = p[i + 3];
+                    let x0 = xtime(a0);
+                    let x1 = xtime(a1);
+                    let x2 = xtime(a2);
+                    let x3 = xtime(a3);
+                    // MixColumns only needs multiplication by 2 and 3 here.
+                    // This avoids the generic bit-loop multiplier in the hot path.
+                    s[i] = x0 ^ (x1 ^ a1) ^ a2 ^ a3;
+                    s[i + 1] = a0 ^ x1 ^ (x2 ^ a2) ^ a3;
+                    s[i + 2] = a0 ^ a1 ^ x2 ^ (x3 ^ a3);
+                    s[i + 3] = (x0 ^ a0) ^ a1 ^ a2 ^ x3;
                 }
             }
             Self::add_round_key(&mut s, &self.round_keys[r]);
