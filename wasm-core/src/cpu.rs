@@ -410,7 +410,14 @@ impl ThumbCpu {
                         self.r[rd]=v;self.set_nz(v);
                         if shift!=0 {self.c=if shift>32 {false}else{(a>>(shift-1))&1!=0};}
                     },
-                    4=>{let shift=b&0xff;let v=if shift>=32 {if (a as i32)<0 {u32::MAX}else{0}}else{((a as i32)>>shift) as u32};self.r[rd]=v;self.set_nz(v);},
+                    4=>{
+                        let shift=b&0xff;
+                        let v=if shift>=32 {if (a as i32)<0 {u32::MAX}else{0}}else{((a as i32)>>shift) as u32};
+                        self.r[rd]=v;self.set_nz(v);
+                        // Register ASR preserves carry for a zero shift; shifts of
+                        // 32 or more carry the original sign bit.
+                        if shift!=0 {self.c=if shift>=32 {(a>>31)!=0}else{((a>>(shift-1))&1)!=0};}
+                    },
                     5=>{let sum=a as u64+b as u64+self.c as u64;let v=sum as u32;self.r[rd]=v;self.set_nz(v);self.c=sum>u32::MAX as u64;self.v=(!(a^b)&(a^v)&0x8000_0000)!=0;},
                     6=>{let borrow=(!self.c) as u32;let v=a.wrapping_sub(b).wrapping_sub(borrow);self.r[rd]=v;self.set_nz(v);self.c=(a as u64)>=(b as u64+borrow as u64);self.v=((a^b)&(a^v)&0x8000_0000)!=0;},
                     8=>{self.set_nz(a&b);},
@@ -684,6 +691,28 @@ mod tests {
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[0],0);
         assert!(!c.c); // counts greater than 32 clear carry.
+    }
+
+    #[test]
+    fn register_asr_updates_carry_for_large_and_zero_shifts() {
+        let mut m=MemoryStorage::new();
+        // ASRS r0, r1 (register-controlled arithmetic right shift).
+        m.pram[0..2].copy_from_slice(&0x4108u16.to_le_bytes());
+        let mut c=ThumbCpu::new();
+        c.r[15]=0; c.r[0]=0x8000_0001; c.r[1]=32; c.c=false;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[0],u32::MAX);
+        assert!(c.c); // At 32+, carry is the original sign bit.
+
+        c.r[15]=0; c.r[0]=0x7fff_ffff; c.r[1]=33; c.c=true;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[0],0);
+        assert!(!c.c);
+
+        c.r[15]=0; c.r[0]=0x1234_5678; c.r[1]=0; c.c=true;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[0],0x1234_5678);
+        assert!(c.c); // A zero register shift leaves carry unchanged.
     }
 
     #[test]
