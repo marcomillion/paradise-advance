@@ -136,7 +136,7 @@ impl BrowserCpu {
         self.cpu.reset_from_vectors(&self.memory,vector_base);
     }
     pub fn set_button(&mut self,index:u32,pressed:bool) -> Result<(),JsValue> {
-        if !self.memory.set_button(index as usize,pressed) { return Err(JsValue::from_str("Button index must be 0..2")); }
+        if !self.memory.set_button(index as usize,pressed) { return Err(JsValue::from_str("Button index must be 0..3 (A, B, C, or dial)")); }
         Ok(())
     }
     pub fn rotate_dial(&mut self,delta:i32) { self.memory.rotate_dial(delta); }
