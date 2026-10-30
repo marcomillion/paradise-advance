@@ -246,6 +246,7 @@
       setMetric('keySearchPeakRate', Math.round(peakRate).toLocaleString() + ' keys/s');
       setMetric('keySearchElapsed', formatDuration(elapsedSeconds));
       setMetric('keySearchEta', tested >= keySpace ? '0s' : formatEta(eta));
+      setMetric('keySearchFullEta', rate > 0 ? formatEta(keySpace / rate) : 'calculating…');
       setMetric('keySearchWorkers', String(lanes));
       const fill = $('keySearchProgressFill');
       if (fill) fill.style.width = percent + '%';
