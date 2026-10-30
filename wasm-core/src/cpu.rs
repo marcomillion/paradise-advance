@@ -204,6 +204,16 @@ mod tests {
         assert_eq!(c.instructions,2);
     }
     #[test]
+    fn executes_thumb2_addw_immediate() {
+        let mut m=MemoryStorage::new();
+        // ADDW r0, r1, #0x234
+        m.write_u8(0,0x01); m.write_u8(1,0xF2);
+        m.write_u8(2,0x34); m.write_u8(3,0x02);
+        let mut c=ThumbCpu::new(); c.r[15]=0; c.r[1]=0x1000;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[0],0x1234); assert_eq!(c.r[15],4);
+    }
+    #[test]
     fn executes_thumb2_ldr_immediate() {
         let mut m=MemoryStorage::new();
         m.write_u8(crate::memory::SRAM_BASE,0x78); m.write_u8(crate::memory::SRAM_BASE+1,0x56);
