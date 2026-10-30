@@ -218,7 +218,7 @@ mod tests {
         let mut m=MemoryStorage::new();
         // SUBW r2, r1, #0x123
         m.write_u8(0,0xA1); m.write_u8(1,0xF2);
-        m.write_u8(2,0x23); m.write_u8(3,0x22);
+        m.write_u8(2,0x23); m.write_u8(3,0x12);
         let mut c=ThumbCpu::new(); c.r[15]=0; c.r[1]=0x2000;
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[2],0x1EDD); assert_eq!(c.r[15],4);
