@@ -652,7 +652,7 @@ mod tests {
         let mut m=MemoryStorage::new();
         m.pram[0..2].copy_from_slice(&0xDF01u16.to_le_bytes()); // SVC #1
         m.pram[0x100..0x102].copy_from_slice(&0xBF00u16.to_le_bytes()); // handler NOP
-        m.write_u32(11*4,0x101);
+        for (i,b) in 0x101u32.to_le_bytes().iter().enumerate() { m.write_u8(11*4+i as u32,*b); }
         let initial_sp=crate::memory::SRAM_BASE+0x100;
         let mut c=ThumbCpu::new();
         c.r[13]=initial_sp;
