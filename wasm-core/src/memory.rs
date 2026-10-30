@@ -34,6 +34,7 @@ pub struct MemoryStorage {
     pub mailbox: Vec<u8>, pub flash: Vec<u8>,
     pub gpio_buttons: [bool; 3], pub dial_counter: i32,
     pub dma_registers: [u32; 78], pub panel_frame: Option<Vec<u16>>, pub dma_irq_pending: bool,
+    pub nvic_iser: [u32; 2],
 }
 impl MemoryStorage {
     pub fn new() -> Self {
@@ -44,7 +45,7 @@ impl MemoryStorage {
         Self { pram:vec![0;PRAM_SIZE], boot_rom, sram:vec![0;SRAM_SIZE],
             mailbox:vec![0;MAILBOX_SIZE], flash:vec![0xFF;FLASH_SIZE],
             gpio_buttons:[false;3], dial_counter:0,
-            dma_registers:[0;78], panel_frame:None, dma_irq_pending:false }
+            dma_registers:[0;78], panel_frame:None, dma_irq_pending:false, nvic_iser:[0;2] }
     }
     pub fn load_pram(&mut self, bytes: &[u8]) {
         self.pram.fill(0);
@@ -60,6 +61,7 @@ impl MemoryStorage {
         self.gpio_buttons[index] = pressed; true
     }
     pub fn rotate_dial(&mut self, delta: i32) { self.dial_counter = self.dial_counter.wrapping_add(delta); }
+    pub fn dma_irq_enabled(&self) -> bool { self.nvic_iser[1] & (1 << (58-32)) != 0 }
     fn gpio_register(&self, offset: u32) -> u32 {
         match offset {
             0 => { let mut v=u32::MAX; for (i,pressed) in self.gpio_buttons.iter().enumerate() { if *pressed { v &= !(1<<i); } } v },
@@ -68,6 +70,10 @@ impl MemoryStorage {
         }
     }
     pub fn read_u8(&self, address: u32) -> u8 {
+        if (0xE000_E100..0xE000_E108).contains(&address) {
+            let offset=address-0xE000_E100; let reg=self.nvic_iser[(offset/4) as usize];
+            return ((reg >> ((offset&3)*8)) & 0xff) as u8;
+        }
         if (0x4000_F000..0x4000_F138).contains(&address) {
             let offset=address-0x4000_F000;
             let reg=self.dma_registers[(offset/4) as usize];
@@ -93,6 +99,14 @@ impl MemoryStorage {
             self.read_u8(address.wrapping_add(2)),self.read_u8(address.wrapping_add(3))])
     }
     pub fn write_u8(&mut self, address: u32, value: u8) -> bool {
+        if (0xE000_E100..0xE000_E108).contains(&address) {
+            let offset=address-0xE000_E100; let bank=(offset/4) as usize; let shift=(offset&3)*8;
+            self.nvic_iser[bank] |= (value as u32) << shift; return true;
+        }
+        if (0xE000_E180..0xE000_E188).contains(&address) {
+            let offset=address-0xE000_E180; let bank=(offset/4) as usize; let shift=(offset&3)*8;
+            self.nvic_iser[bank] &= !((value as u32) << shift); return true;
+        }
         if (0x4000_F000..0x4000_F138).contains(&address) {
             let offset=address-0x4000_F000;
             let word=(offset/4) as usize;
