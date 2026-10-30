@@ -3,149 +3,222 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#10131c">
-    <title>Paradise Advance</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#fff8ec">
+    <title>Paradise Advance — Firmware Workshop</title>
     <link rel="stylesheet" href="style.css">
     <script src="script.js" defer></script>
 </head>
 <body>
     <header class="topbar">
-        <a class="logo" href="./">PARADISE<span>ADVANCE</span></a>
-        <span class="version">EARLY ACCESS</span>
-    </header><!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#10131c">
-    <title>Paradise Advance</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="script.js" defer></script>
-</head>
-<body>
-    <header class="topbar">
-        <a class="logo" href="./">PARADISE<span>ADVANCE</span></a>
-        <span class="version">EARLY ACCESS</span>
-    </header>
-    <main class="layout">
-        <section class="intro">
-            <p class="eyebrow">TAMAGOTCHI PARADISE TOOLKIT</p>
-            <h1>Your firmware.<br><span>Your creativity.</span></h1>
-            <p class="description">
-                A browser-based workspace for experimenting with sprites
-                and preparing custom graphics for Tamagotchi Paradise.
-            </p>
-        </section>
+        <a href="#" class="brand">
+            <span class="brand-icon">✳</span>
+            <span>PARADISE <b>ADVANCE</b><small>FIRMWARE WORKSHOP</small></span>
+        </a>
+    <div class="top-actions">
+        <span id="firmwareBadge" class="status-badge">● NO FIRMWARE</span>
+        <label class="button button-coral upload-button">
+            Open firmware
+            <input id="firmwareInput" type="file" hidden>
+        </label>
+    </div>
+</header>
 
-        <section class="panel firmware-panel">
-            <div class="section-heading">
-                <div>
-                    <p class="eyebrow">01 / FIRMWARE</p>
-                    <h2>Load your firmware</h2>
-                </div>
-                <span class="badge">LOCAL ONLY</span>
-            </div>
+<nav class="mode-nav" aria-label="Workspace modes">
+    <button class="mode-tab active" data-view="studio">▦ Firmware Studio</button>
+    <button class="mode-tab" data-view="lab">▧ Pixel Lab</button>
+    <button class="mode-tab" data-view="simulator">▣ Paradise Simulator</button>
+</nav>
 
-            <label class="upload-area" for="firmwareInput">
-                <span class="upload-icon">↑</span>
-                <strong>Choose a firmware file</strong>
-                <span>Click here to browse your device</span>
-                <input id="firmwareInput" type="file" hidden>
-            </label>
+<main>
+    <section class="welcome">
+        <div>
+            <span class="eyebrow">YOUR DEVICE · YOUR CREATIONS</span>
+            <h1>Make Paradise <span>your own.</span></h1>
+            <p>Explore graphics, create pixel art and preview your designs.</p>
+        </div>
+        <div class="flower-decoration" aria-hidden="true">✿</div>
+    </section>
 
-            <div id="firmwareStatus" class="status" role="status">
-                No firmware loaded.
-            </div>
-
-            <p class="small-note">
-                Your selected firmware stays in this browser. This prototype
-                does not upload it or modify its contents.
-            </p>
-        </section>
-
-        <section class="editor-grid">
-            <div class="panel editor-panel">
-                <div class="section-heading">
+    <section class="view active" id="view-studio">
+        <div class="studio-layout">
+            <aside class="card file-sidebar">
+                <div class="card-heading">
                     <div>
-                        <p class="eyebrow">02 / SPRITE LAB</p>
-                        <h2>Pixel editor</h2>
+                        <span class="eyebrow">WORKSPACE 01</span>
+                        <h2>Project files</h2>
                     </div>
-                    <span class="badge">16 × 16</span>
+                    <span class="heading-icon">▤</span>
                 </div>
 
-                <div class="canvas-wrap">
-                    <canvas id="spriteCanvas"
-                            width="16"
-                            height="16"
-                            aria-label="16 by 16 pixel sprite editor"></canvas>
+                <div class="file-entry selected">
+                    <span class="file-icon">▣</span>
+                    <div><strong>Firmware</strong><small id="fileName">No file selected</small></div>
+                </div>
+                <div class="file-entry">
+                    <span class="file-icon">▦</span>
+                    <div><strong>Sprite collection</strong><small>Custom artwork</small></div>
+                </div>
+                <div class="file-entry">
+                    <span class="file-icon">◉</span>
+                    <div><strong>Colour palettes</strong><small>Coming soon</small></div>
                 </div>
 
-                <div class="tools">
-                    <label class="color-control">
-                        Pixel colour
-                        <input id="pixelColor" type="color" value="#63e6be">
+                <div class="sidebar-note">
+                    <span>✿</span>
+                    <strong>Made for curious creators</strong>
+                    <p>Your firmware is read locally in your browser. It is not uploaded.</p>
+                </div>
+            </aside>
+
+            <div class="studio-main">
+                <div class="card firmware-card">
+                    <div class="card-heading">
+                        <div>
+                            <span class="eyebrow">FIRMWARE INSPECTOR</span>
+                            <h2>Your firmware</h2>
+                        </div>
+                        <span class="pill pill-yellow">EXPERIMENTAL</span>
+                    </div>
+                    <div id="firmwareDetails" class="firmware-details">
+                        <div class="empty-symbol">＋</div>
+                        <div>
+                            <strong>Nothing loaded yet</strong>
+                            <p>Choose your firmware file to see its basic information.</p>
+                        </div>
+                    </div>
+                    <p class="helper-text">Reading a file is supported. Extracting and patching actual firmware graphics is not implemented yet.</p>
+                </div>
+
+                <div class="card editor-card">
+                    <div class="card-heading">
+                        <div>
+                            <span class="eyebrow">SPRITE WORKSPACE</span>
+                            <h2>Sprite preview</h2>
+                        </div>
+                        <span class="pill">16 × 16 PX</span>
+                    </div>
+                    <div class="editor-area">
+                        <div class="canvas-stage">
+                            <canvas class="sprite-canvas" width="16" height="16" aria-label="Pixel sprite editor"></canvas>
+                        </div>
+                        <div class="editor-controls">
+                            <label class="color-picker">
+                                <span>Pixel colour</span>
+                                <input class="pixel-color" type="color" value="#ff806e">
+                            </label>
+                            <div class="tool-row">
+                                <button class="button tool-button active" data-tool="pencil">✎ Pencil</button>
+                                <button class="button tool-button" data-tool="eraser">⌫ Eraser</button>
+                                <button class="button clear-button">Clear</button>
+                            </div>
+                            <button class="button button-coral export-button">↓ Export PNG</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="view" id="view-lab">
+        <div class="lab-heading">
+            <div>
+                <span class="eyebrow">WORKSPACE 02</span>
+                <h2>The Pixel Lab</h2>
+                <p>Draw a new creature, object or tiny world, one pixel at a time.</p>
+            </div>
+            <span class="pill pill-pink">CREATIVE MODE</span>
+        </div>
+
+        <div class="lab-layout">
+            <div class="card lab-editor">
+                <div class="card-heading">
+                    <h2>Canvas</h2>
+                    <span class="pill">16 × 16 PX</span>
+                </div>
+                <div class="lab-canvas-stage">
+                    <canvas class="sprite-canvas" width="16" height="16" aria-label="Pixel art canvas"></canvas>
+                </div>
+                <div class="lab-toolbar">
+                    <label class="color-picker">
+                        <span>Choose colour</span>
+                        <input class="pixel-color" type="color" value="#ff806e">
                     </label>
-
-                    <button id="pencilButton" class="button active" type="button">
-                        Pencil
-                    </button>
-                    <button id="eraserButton" class="button" type="button">
-                        Eraser
-                    </button>
-                    <button id="clearButton" class="button danger" type="button">
-                        Clear
-                    </button>
+                    <button class="button tool-button active" data-tool="pencil">✎ Pencil</button>
+                    <button class="button tool-button" data-tool="eraser">⌫ Eraser</button>
+                    <button class="button clear-button">Clear canvas</button>
+                    <button class="button button-coral export-button">Export PNG ↓</button>
                 </div>
-
-                <button id="exportButton" class="button primary full" type="button">
-                    Export sprite as PNG
-                </button>
-
-                <p class="small-note">
-                    Draw with your mouse or touch the grid. Blank pixels are
-                    transparent when exported.
-                </p>
             </div>
 
-            <div class="panel library-panel">
-                <div class="section-heading">
-                    <div>
-                        <p class="eyebrow">03 / COLLECTION</p>
-                        <h2>Sprite library</h2>
+            <aside class="card palette-card">
+                <span class="eyebrow">QUICK COLOURS</span>
+                <h2>Colour palette</h2>
+                <p>Pick a colour to start creating.</p>
+                <div class="swatches">
+                    <button style="--swatch:#ff806e" data-color="#ff806e" aria-label="Coral"></button>
+                    <button style="--swatch:#ffbd69" data-color="#ffbd69" aria-label="Orange"></button>
+                    <button style="--swatch:#ffe08a" data-color="#ffe08a" aria-label="Sunshine yellow"></button>
+                    <button style="--swatch:#b7e4a8" data-color="#b7e4a8" aria-label="Leaf green"></button>
+                    <button style="--swatch:#79d8c2" data-color="#79d8c2" aria-label="Mint"></button>
+                    <button style="--swatch:#8dc9f4" data-color="#8dc9f4" aria-label="Sky blue"></button>
+                    <button style="--swatch:#a8a0e8" data-color="#a8a0e8" aria-label="Lavender"></button>
+                    <button style="--swatch:#f3a9cb" data-color="#f3a9cb" aria-label="Pink"></button>
+                    <button style="--swatch:#594b48" data-color="#594b48" aria-label="Brown"></button>
+                    <button style="--swatch:#ffffff" data-color="#ffffff" aria-label="White"></button>
+                </div>
+
+                <div class="tip-box">
+                    <strong>✿ Tiny tip</strong>
+                    <p>Small sprites work best when you plan their silhouette first, then add details.</p>
+                </div>
+            </aside>
+        </div>
+    </section>
+
+    <section class="view" id="view-simulator">
+        <div class="sim-heading">
+            <div>
+                <span class="eyebrow">WORKSPACE 03</span>
+                <h2>Paradise Simulator</h2>
+                <p>Preview your current sprite inside a virtual handheld-style screen.</p>
+            </div>
+            <span class="pill pill-mint">PREVIEW MODE</span>
+        </div>
+
+        <div class="sim-layout">
+            <div class="device-wrap">
+                <div class="device">
+                    <div class="device-camera"></div>
+                    <div class="device-screen">
+                        <div class="screen-header"><span>PARADISE</span><span>♥ ♥ ♥</span></div>
+                        <div class="sim-art">
+                            <canvas id="simCanvas" width="16" height="16" aria-label="Sprite simulator preview"></canvas>
+                        </div>
+                        <div class="screen-caption" id="simCaption">YOUR PIXEL CREATION</div>
+                        <div class="screen-footer"><span>MENU</span><span>SELECT</span></div>
                     </div>
-                </div>
-
-                <div id="spriteLibrary" class="empty-library">
-                    <span class="empty-icon">◇</span>
-                    <strong>Your collection starts here</strong>
-                    <p>Export a sprite to save it to your device.</p>
-                </div>
-
-                <div class="future-feature">
-                    <span class="badge">PLANNED</span>
-                    <h3>Firmware sprite extraction</h3>
-                    <p>
-                        Discover sprite locations, preview existing graphics,
-                        and prepare safe firmware patches.
-                    </p>
-                </div>
-
-                <div class="future-feature">
-                    <span class="badge">PLANNED</span>
-                    <h3>Community sprites</h3>
-                    <p>
-                        Import and share custom sprites without sharing
-                        your original firmware.
-                    </p>
+                    <div class="device-controls"><span>●</span><span>●</span><span>●</span></div>
                 </div>
             </div>
-        </section>
 
-        <footer>
-            <span>PARADISE ADVANCE</span>
-            <span>An independent community project.</span>
-        </footer>
-    </main>
+            <div class="card sim-info">
+                <span class="eyebrow">LIVE PREVIEW</span>
+                <h2>Your creation, on screen.</h2>
+                <p>The preview follows your Pixel Lab and Firmware Studio canvas as you draw.</p>
+                <div class="info-row"><span>Sprite size</span><strong>16 × 16 pixels</strong></div>
+                <div class="info-row"><span>Background</span><strong>Transparent</strong></div>
+                <div class="info-row"><span>Device emulation</span><strong>Visual mock-up only</strong></div>
+                <button class="button button-coral" data-go="lab">Edit this sprite ↗</button>
+                <p class="helper-text">This is not an emulator of the real Tamagotchi Paradise hardware or firmware. Device behaviour is not simulated.</p>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <span>✿ PARADISE ADVANCE</span>
+        <span>Independent fan-made project · Not affiliated with Bandai</span>
+    </footer>
+</main>
 </body>
 </html>
