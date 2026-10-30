@@ -1,297 +1,151 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#10131c">
     <title>Paradise Advance</title>
-    <style>
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            margin: 0;
-            padding: 30px;
-            background: #f5f7f2;
-            color: #29352b;
-            font-family: Arial, sans-serif;
-        }
-
-        header {
-            max-width: 1000px;
-            margin: 0 auto 30px;
-        }
-
-        h1 {
-            margin-bottom: 6px;
-        }
-
-        .subtitle {
-            color: #718071;
-        }
-
-        main {
-            max-width: 1000px;
-            margin: auto;
-            display: grid;
-            grid-template-columns: 280px 1fr;
-            gap: 20px;
-        }
-
-        section {
-            padding: 20px;
-            background: white;
-            border: 1px solid #e0e6dc;
-            border-radius: 12px;
-        }
-
-        button, .file-button {
-            display: inline-block;
-            padding: 10px 14px;
-            border: 0;
-            border-radius: 7px;
-            background: #50785a;
-            color: white;
-            cursor: pointer;
-            font-size: 14px;
-        }
-
-        button:hover, .file-button:hover {
-            background: #3e6247;
-        }
-
-        input[type="file"] {
-            display: none;
-        }
-
-        #firmwareName {
-            overflow-wrap: anywhere;
-            color: #718071;
-            font-size: 13px;
-        }
-
-        .editor {
-            margin-top: 20px;
-        }
-
-        canvas {
-            display: block;
-            width: min(100%, 400px);
-            height: auto;
-            aspect-ratio: 1;
-            margin: 20px auto;
-            border: 1px solid #dce3d8;
-            image-rendering: pixelated;
-            background-color: white;
-            background-image:
-                linear-gradient(45deg, #edf0ea 25%, transparent 25%),
-                linear-gradient(-45deg, #edf0ea 25%, transparent 25%),
-                linear-gradient(45deg, transparent 75%, #edf0ea 75%),
-                linear-gradient(-45deg, transparent 75%, #edf0ea 75%);
-            background-size: 16px 16px;
-            background-position: 0 0, 0 8px, 8px -8px, -8px 0;
-            touch-action: none;
-        }
-
-        .tools {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-
-        .secondary {
-            background: #eaf0e7;
-            color: #29352b;
-        }
-
-        .secondary:hover {
-            background: #dce7d8;
-        }
-
-        #status {
-            color: #718071;
-            font-size: 13px;
-            line-height: 1.5;
-        }
-
-        @media (max-width: 650px) {
-            body {
-                padding: 18px;
-            }
-
-            main {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
 </head>
 <body>
+    <header class="topbar">
+        <a class="logo" href="./">PARADISE<span>ADVANCE</span></a>
+        <span class="version">EARLY ACCESS</span>
+    </header><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#10131c">
+    <title>Paradise Advance</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+    <header class="topbar">
+        <a class="logo" href="./">PARADISE<span>ADVANCE</span></a>
+        <span class="version">EARLY ACCESS</span>
+    </header>
+    <main class="layout">
+        <section class="intro">
+            <p class="eyebrow">TAMAGOTCHI PARADISE TOOLKIT</p>
+            <h1>Your firmware.<br><span>Your creativity.</span></h1>
+            <p class="description">
+                A browser-based workspace for experimenting with sprites
+                and preparing custom graphics for Tamagotchi Paradise.
+            </p>
+        </section>
 
-<header>
-    <h1>✳ Paradise Advance</h1>
-    <div class="subtitle">
-        Tamagotchi Paradise firmware & sprite workshop
-    </div>
-</header>
-
-<main>
-    <section>
-        <h2>Firmware</h2>
-        <p>Choose a firmware file from your device.</p>
-
-        <label class="file-button" for="firmwareInput">
-            Load firmware
-        </label>
-
-        <input
-            type="file"
-            id="firmwareInput"
-            accept=".bin,.rom,.fw,.hex,.img"
-        >
-
-        <p id="firmwareName">No firmware loaded.</p>
-
-        <hr>
-
-        <h2>Sprite library</h2>
-        <p id="spriteStatus">
-            Load firmware to begin exploring its sprites.
-        </p>
-
-        <p style="font-size: 12px; color: #718071;">
-            Automatic sprite extraction is not implemented yet.
-        </p>
-    </section>
-
-    <section>
-        <h2>Sprite editor</h2>
-        <p id="editorStatus">Test canvas · 16 × 16 pixels</p>
-
-        <div class="editor">
-            <canvas id="spriteCanvas" width="16" height="16"></canvas>
-
-            <div class="tools">
-                <button id="pencil">Pencil</button>
-                <button id="eraser" class="secondary">Eraser</button>
-                <button id="clear" class="secondary">Clear</button>
-                <button id="export" class="secondary">Export PNG</button>
+        <section class="panel firmware-panel">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">01 / FIRMWARE</p>
+                    <h2>Load your firmware</h2>
+                </div>
+                <span class="badge">LOCAL ONLY</span>
             </div>
-        </div>
 
-        <p id="status">
-            Your firmware and drawing stay in this browser.
-        </p>
-    </section>
-</main>
+            <label class="upload-area" for="firmwareInput">
+                <span class="upload-icon">↑</span>
+                <strong>Choose a firmware file</strong>
+                <span>Click here to browse your device</span>
+                <input id="firmwareInput" type="file" hidden>
+            </label>
 
-<script>
-    const firmwareInput = document.getElementById("firmwareInput");
-    const firmwareName = document.getElementById("firmwareName");
-    const spriteStatus = document.getElementById("spriteStatus");
-    const editorStatus = document.getElementById("editorStatus");
-    const status = document.getElementById("status");
+            <div id="firmwareStatus" class="status" role="status">
+                No firmware loaded.
+            </div>
 
-    const canvas = document.getElementById("spriteCanvas");
-    const ctx = canvas.getContext("2d");
+            <p class="small-note">
+                Your selected firmware stays in this browser. This prototype
+                does not upload it or modify its contents.
+            </p>
+        </section>
 
-    let drawing = false;
-    let erasing = false;
+        <section class="editor-grid">
+            <div class="panel editor-panel">
+                <div class="section-heading">
+                    <div>
+                        <p class="eyebrow">02 / SPRITE LAB</p>
+                        <h2>Pixel editor</h2>
+                    </div>
+                    <span class="badge">16 × 16</span>
+                </div>
 
-    function renderCanvas() {
-        ctx.imageSmoothingEnabled = false;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-    }
+                <div class="canvas-wrap">
+                    <canvas id="spriteCanvas"
+                            width="16"
+                            height="16"
+                            aria-label="16 by 16 pixel sprite editor"></canvas>
+                </div>
 
-    renderCanvas();
+                <div class="tools">
+                    <label class="color-control">
+                        Pixel colour
+                        <input id="pixelColor" type="color" value="#63e6be">
+                    </label>
 
-    firmwareInput.addEventListener("change", async () => {
-        const file = firmwareInput.files[0];
+                    <button id="pencilButton" class="button active" type="button">
+                        Pencil
+                    </button>
+                    <button id="eraserButton" class="button" type="button">
+                        Eraser
+                    </button>
+                    <button id="clearButton" class="button danger" type="button">
+                        Clear
+                    </button>
+                </div>
 
-        if (!file) return;
+                <button id="exportButton" class="button primary full" type="button">
+                    Export sprite as PNG
+                </button>
 
-        firmwareName.textContent =
-            file.name + " · " + file.size.toLocaleString() + " bytes";
+                <p class="small-note">
+                    Draw with your mouse or touch the grid. Blank pixels are
+                    transparent when exported.
+                </p>
+            </div>
 
-        status.textContent = "Reading firmware locally...";
+            <div class="panel library-panel">
+                <div class="section-heading">
+                    <div>
+                        <p class="eyebrow">03 / COLLECTION</p>
+                        <h2>Sprite library</h2>
+                    </div>
+                </div>
 
-        try {
-            // Read into browser memory. No network upload occurs.
-            const firmware = await file.arrayBuffer();
+                <div id="spriteLibrary" class="empty-library">
+                    <span class="empty-icon">◇</span>
+                    <strong>Your collection starts here</strong>
+                    <p>Export a sprite to save it to your device.</p>
+                </div>
 
-            status.textContent =
-                "Loaded " + firmware.byteLength.toLocaleString() +
-                " bytes locally. Sprite extraction is not available yet.";
+                <div class="future-feature">
+                    <span class="badge">PLANNED</span>
+                    <h3>Firmware sprite extraction</h3>
+                    <p>
+                        Discover sprite locations, preview existing graphics,
+                        and prepare safe firmware patches.
+                    </p>
+                </div>
 
-            spriteStatus.textContent =
-                "Firmware loaded. Waiting for the graphics decoder.";
+                <div class="future-feature">
+                    <span class="badge">PLANNED</span>
+                    <h3>Community sprites</h3>
+                    <p>
+                        Import and share custom sprites without sharing
+                        your original firmware.
+                    </p>
+                </div>
+            </div>
+        </section>
 
-            editorStatus.textContent =
-                "Test canvas · firmware loaded, sprites not decoded";
-        } catch (error) {
-            status.textContent = "Could not read the selected file.";
-        }
-    });
-
-    function drawPixel(event) {
-        const rect = canvas.getBoundingClientRect();
-
-        const x = Math.floor(
-            (event.clientX - rect.left) / rect.width * canvas.width
-        );
-
-        const y = Math.floor(
-            (event.clientY - rect.top) / rect.height * canvas.height
-        );
-
-        if (
-            x < 0 || y < 0 ||
-            x >= canvas.width || y >= canvas.height
-        ) return;
-
-        ctx.fillStyle = erasing ? "#ffffff" : "#29352b";
-        ctx.fillRect(x, y, 1, 1);
-    }
-
-    canvas.addEventListener("pointerdown", event => {
-        drawing = true;
-        canvas.setPointerCapture(event.pointerId);
-        drawPixel(event);
-    });
-
-    canvas.addEventListener("pointermove", event => {
-        if (drawing) drawPixel(event);
-    });
-
-    canvas.addEventListener("pointerup", () => {
-        drawing = false;
-    });
-
-    canvas.addEventListener("pointercancel", () => {
-        drawing = false;
-    });
-
-    document.getElementById("pencil").addEventListener("click", () => {
-        erasing = false;
-        status.textContent = "Pencil selected.";
-    });
-
-    document.getElementById("eraser").addEventListener("click", () => {
-        erasing = true;
-        status.textContent = "Eraser selected.";
-    });
-
-    document.getElementById("clear").addEventListener("click", () => {
-        renderCanvas();
-        status.textContent = "Canvas cleared.";
-    });
-
-    document.getElementById("export").addEventListener("click", () => {
-        const link = document.createElement("a");
-        link.download = "paradise-advance-sprite.png";
-        link.href = canvas.toDataURL("image/png");
-        link.click();
-    });
-</script>
-
+        <footer>
+            <span>PARADISE ADVANCE</span>
+            <span>An independent community project.</span>
+        </footer>
+    </main>
 </body>
 </html>
