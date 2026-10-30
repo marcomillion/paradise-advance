@@ -10,16 +10,16 @@ pub enum CpuFault { UnsupportedInstruction(u16), InvalidExecutionAddress(u32), H
 pub struct ThumbCpu {
     pub r: [u32; 16],
     pub n: bool, pub z: bool, pub c: bool, pub v: bool,
-    pub instructions: u64, pub halted: bool, pub last_fault: Option<CpuFault>, in_irq: bool, primask: bool,
+    pub instructions: u64, pub halted: bool, pub last_fault: Option<CpuFault>, in_irq: bool, primask: bool, itstate: u8,
 }
 impl ThumbCpu {
     pub fn new() -> Self {
-        Self { r:[0;16], n:false,z:false,c:false,v:false,instructions:0,halted:false,last_fault:None,in_irq:false,primask:false }
+        Self { r:[0;16], n:false,z:false,c:false,v:false,instructions:0,halted:false,last_fault:None,in_irq:false,primask:false,itstate:0 }
     }
     pub fn reset_from_vectors(&mut self, memory:&MemoryStorage, vector_base:u32) {
         self.r=[0;16]; self.r[13]=memory.read_u32(vector_base);
         self.r[15]=memory.read_u32(vector_base.wrapping_add(4)) & !1;
-        self.halted=false; self.last_fault=None; self.instructions=0; self.in_irq=false; self.primask=false;
+        self.halted=false; self.last_fault=None; self.instructions=0; self.in_irq=false; self.primask=false; self.itstate=0;
     }
     fn set_nz(&mut self, value:u32) { self.n=value>>31!=0; self.z=value==0; }
     fn condition(&self, cond:u16)->bool { match cond {
@@ -84,12 +84,7 @@ impl ThumbCpu {
         }
         let f=CpuFault::UnsupportedInstruction(first); self.halted=true; self.last_fault=Some(f); Err(f)
     }
-    fn step_inner(&mut self, m:&mut MemoryStorage)->Result<(),CpuFault> {
-        if self.in_irq && self.r[15]>=0xFFFF_FFF0 {
-            self.exception_return(m);
-            return Ok(());
-        }
-        if self.halted { return Err(CpuFault::Halted); }
+    fn step_decoded(&mut self, m:&mut MemoryStorage)->Result<(),CpuFault> {
         let pc=self.r[15];
         if pc&1!=0 || (pc&1)==0 && pc==0xffff_ffff {
             self.halted=true; let f=CpuFault::InvalidExecutionAddress(pc); self.last_fault=Some(f); return Err(f);
@@ -103,6 +98,7 @@ impl ThumbCpu {
         match op {
             0xBF00 => {}, // NOP
             0xBF10 | 0xBF20 | 0xBF30 | 0xBF40 | 0xBF50 => {}, // YIELD/WFE/WFI/SEV/SEVL hints
+            0xBF01..=0xBFFF if (op&0x000F)!=0 && ((op>>4)&0xF)<14 => { self.itstate=(op&0x00FF) as u8; }, // IT block
             0xB662 => { self.primask=false; }, // CPSIE i
             0xB672 => { self.primask=true; },  // CPSID i
             0xBE00..=0xBEFF => { self.halted=true; },
@@ -243,7 +239,8 @@ impl ThumbCpu {
         if !m.dma_irq_pending || !m.dma_irq_enabled() || self.in_irq || self.primask { return; }
         m.dma_irq_pending=false;
         let mut sp=self.r[13];
-        let xpsr=((self.n as u32)<<31)|((self.z as u32)<<30)|((self.c as u32)<<29)|((self.v as u32)<<28)|(1<<24);
+        let it=self.itstate as u32;
+        let xpsr=((self.n as u32)<<31)|((self.z as u32)<<30)|((self.c as u32)<<29)|((self.v as u32)<<28)|(1<<24)|((it&3)<<25)|(((it>>2)&0x3F)<<10);
         let frame=[self.r[0],self.r[1],self.r[2],self.r[3],self.r[12],self.r[14],self.r[15],xpsr];
         for value in frame.iter().rev() {
             sp=sp.wrapping_sub(4);
@@ -262,7 +259,32 @@ impl ThumbCpu {
         let pc=pop(); let xpsr=pop();
         self.n=xpsr&(1<<31)!=0; self.z=xpsr&(1<<30)!=0;
         self.c=xpsr&(1<<29)!=0; self.v=xpsr&(1<<28)!=0;
+        self.itstate=((((xpsr>>25)&3)|(((xpsr>>10)&0x3F)<<2))&0xFF) as u8;
         self.r[13]=sp; self.r[15]=pc&!1; self.in_irq=false;
+    }
+    fn advance_itstate(&mut self) {
+        if self.itstate==0 { return; }
+        if self.itstate&0x7==0 { self.itstate=0; }
+        else { self.itstate=(self.itstate&0xE0)|((self.itstate<<1)&0x1F); }
+    }
+    fn step_inner(&mut self,m:&mut MemoryStorage)->Result<(),CpuFault> {
+        if self.in_irq && self.r[15]>=0xFFFF_FFF0 { self.exception_return(m); return Ok(()); }
+        if self.halted { return Err(CpuFault::Halted); }
+        let in_it=self.itstate!=0;
+        if in_it {
+            let pc=self.r[15];
+            let op=m.read_u8(pc) as u16|((m.read_u8(pc.wrapping_add(1)) as u16)<<8);
+            let wide=matches!(op&0xF800,0xE800|0xF000|0xF800);
+            if !self.condition((self.itstate>>4) as u16) {
+                self.r[15]=pc.wrapping_add(if wide {4}else{2});
+                self.instructions=self.instructions.wrapping_add(1);
+                self.advance_itstate();
+                return Ok(());
+            }
+        }
+        let result=self.step_decoded(m);
+        if in_it && result.is_ok() { self.advance_itstate(); }
+        result
     }
     pub fn step(&mut self,m:&mut MemoryStorage)->Result<(),CpuFault> {
         let result=self.step_inner(m);
