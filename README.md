@@ -23,6 +23,18 @@ python -m http.server 8000
 
 Then open `http://localhost:8000` in a modern browser.
 
+## Run the browser smoke tests
+
+Node.js 22 or newer and Python 3 are recommended.
+
+```bash
+npm install
+npx playwright install chromium
+npm run test:e2e
+```
+
+The Playwright suite checks sprite creation/renaming and local persistence, pixel painting and JSON export, local gallery draft management, and browser WebAssembly startup. GitHub Actions runs these checks alongside the Rust unit tests and WebAssembly build.
+
 The WebAssembly worker and generated package are stored in `wasm-core/browser-worker.js` and `wasm-core/pkg/`. To rebuild the package after changing Rust code:
 
 ```bash
