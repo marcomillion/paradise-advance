@@ -137,13 +137,15 @@ impl BrowserCpu {
     }
     pub fn step(&mut self)->Result<(),JsValue> {
         let result=self.cpu.step(&mut self.memory).map_err(|e|JsValue::from_str(&format!("{:?}",e)));
-        self.display.sync_from_sram(&self.memory.sram);
+        if let Some(frame)=self.memory.panel_frame.take() { self.display.receive_frame(&frame); }
+        else { self.display.sync_from_sram(&self.memory.sram); }
         result
     }
     pub fn run_steps(&mut self,count:u32)->u32 {
         let mut done=0;
         for _ in 0..count.min(1_000_000) { if self.cpu.step(&mut self.memory).is_err(){break;} done+=1; }
-        self.display.sync_from_sram(&self.memory.sram);
+        if let Some(frame)=self.memory.panel_frame.take() { self.display.receive_frame(&frame); }
+        else { self.display.sync_from_sram(&self.memory.sram); }
         done
     }
     pub fn display_width(&self)->u32 {self.display.width() as u32}
