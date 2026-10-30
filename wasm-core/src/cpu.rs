@@ -239,21 +239,31 @@ impl ThumbCpu {
         }
         self.instructions=self.instructions.wrapping_add(1); Ok(())
     }
-    fn service_dma_irq(&mut self, m:&mut MemoryStorage) {
-        if !m.dma_irq_pending || !m.dma_irq_enabled() || self.in_irq || self.primask { return; }
-        m.dma_irq_pending=false;
+    fn enter_exception(&mut self,m:&mut MemoryStorage,exception_number:u32) {
         let mut sp=self.r[13];
         let it=self.itstate as u32;
         let xpsr=((self.n as u32)<<31)|((self.z as u32)<<30)|((self.c as u32)<<29)|((self.v as u32)<<28)|(1<<24)|((it&3)<<25)|(((it>>2)&0x3F)<<10);
         let frame=[self.r[0],self.r[1],self.r[2],self.r[3],self.r[12],self.r[14],self.r[15],xpsr];
         for value in frame.iter().rev() {
             sp=sp.wrapping_sub(4);
-            for i in 0..4 { m.write_u8(sp+i,(value>>(i*8)) as u8); }
+            for i in 0..4 { m.write_u8(sp+i,(*value>>(i*8)) as u8); }
         }
         self.r[13]=sp;
         self.r[14]=0xFFFF_FFF9;
-        self.r[15]=m.read_u32(0x0000_0128)&!1; // IRQ 58 vector (exception 74)
+        self.r[15]=m.read_u32(exception_number.wrapping_mul(4))&!1;
         self.in_irq=true;
+    }
+    fn service_pending_interrupt(&mut self,m:&mut MemoryStorage) {
+        if self.in_irq || self.primask { return; }
+        if m.systick_pending && m.systick_ctrl&2!=0 {
+            m.systick_pending=false;
+            self.enter_exception(m,15); // SysTick exception vector
+            return;
+        }
+        if m.dma_irq_pending && m.dma_irq_enabled() {
+            m.dma_irq_pending=false;
+            self.enter_exception(m,74); // DMA IRQ 58 + core exception offset 16
+        }
     }
     fn exception_return(&mut self,m:&MemoryStorage) {
         let mut sp=self.r[13];
@@ -297,7 +307,7 @@ impl ThumbCpu {
     }
     pub fn step(&mut self,m:&mut MemoryStorage)->Result<(),CpuFault> {
         let result=self.step_inner(m);
-        if result.is_ok() { self.service_dma_irq(m); }
+        if result.is_ok() { m.tick_systick(); self.service_pending_interrupt(m); }
         result
     }
 }
