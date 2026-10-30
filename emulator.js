@@ -81,7 +81,7 @@
     const scale = Number($('previewScale')?.value || 3);
     canvas.style.width = (frame.width * scale) + 'px';
     canvas.style.height = (frame.height * scale) + 'px';
-    if (inputStatus) inputStatus.textContent = 'Experimental SRAM framebuffer snapshot · display DMA and physical inputs are not yet emulated.';
+    if (inputStatus) inputStatus.textContent = 'Experimental SRAM framebuffer snapshot · partial DMA path; buttons and dial use an initial GPIO model.';
   }
   window.paradiseBrowserPetDraw = () => { refreshFirmwareFrame().catch(() => {}); };
   function formatHex(value) {
