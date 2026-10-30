@@ -92,6 +92,38 @@
     if (!/^[0-9a-fA-F]{1,8}$/.test(raw)) throw new Error('Enter the 32-bit device key as 1–8 hexadecimal digits, optionally prefixed with 0x.');
     return Number.parseInt(raw, 16) >>> 0;
   }
+  const savedKeyStorageName = 'paradise-mod-studio-device-key-v1';
+  function syncRememberedKey() {
+    const checkbox = $('rememberDeviceKey');
+    const input = $('deviceKeyInput');
+    if (!checkbox || !input) return;
+    try {
+      if (!checkbox.checked) {
+        localStorage.removeItem(savedKeyStorageName);
+        return;
+      }
+      const raw = input.value.trim().replace(/^0x/i, '');
+      if (/^[0-9a-fA-F]{1,8}$/.test(raw)) {
+        localStorage.setItem(savedKeyStorageName, formatHex(Number.parseInt(raw, 16) >>> 0));
+      } else {
+        localStorage.removeItem(savedKeyStorageName);
+      }
+    } catch (_) {
+      const status = $('deviceKeySearchStatus');
+      if (status) status.textContent = 'This browser blocked local storage; the key will not be remembered.';
+    }
+  }
+  try {
+    const savedKey = localStorage.getItem(savedKeyStorageName);
+    if (savedKey && /^0x[0-9a-fA-F]{8}$/.test(savedKey)) {
+      $('deviceKeyInput').value = savedKey.toUpperCase();
+      $('rememberDeviceKey').checked = true;
+    }
+  } catch (_) {}
+  $('rememberDeviceKey')?.addEventListener('change', syncRememberedKey);
+  $('deviceKeyInput')?.addEventListener('input', () => {
+    if ($('rememberDeviceKey')?.checked) syncRememberedKey();
+  });
   async function inspectSelectedFile(file) {
     if (!file) return;
     firmwareBytes = null; firmwareInfo = null; cpuLoaded = false;
@@ -254,6 +286,7 @@
         searchStatus.textContent = 'Key search cancelled. No key was sent anywhere.';
       } else if (foundKey !== null) {
         $('deviceKeyInput').value = formatHex(foundKey);
+        if ($('rememberDeviceKey')?.checked) syncRememberedKey();
         searchStatus.textContent = 'Candidate key ' + formatHex(foundKey) + ' found. Load firmware to validate it; the key was found locally.';
       } else if (failure) {
         searchStatus.textContent = 'Key search failed: ' + failure.message;
