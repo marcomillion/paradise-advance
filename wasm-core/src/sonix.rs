@@ -147,3 +147,21 @@ fn decrypt_region(flash:&mut [u8], table:&LoadTable, region:Region, device_key:u
         }
     }
 }
+
+#[cfg(test)]
+mod decryption_tests {
+    use super::*;
+    #[test]
+    fn unencrypted_image_is_returned_unchanged() {
+        let mut b=vec![0u8;TABLE_STRIDE];
+        b[..8].copy_from_slice(b"SONIXDEV");
+        b[0x1f8..0x1fc].copy_from_slice(&VERSION_V3.to_le_bytes());
+        // load_config bit zero: no encryption.
+        let result=decrypt_dump_with_key(&b,0x1234_5678).unwrap();
+        assert_eq!(result,b);
+    }
+    #[test]
+    fn decryption_rejects_missing_load_table() {
+        assert_eq!(decrypt_dump_with_key(&[0u8;TABLE_STRIDE],0),Err("No valid Sonix load table found"));
+    }
+}
