@@ -30,8 +30,9 @@ self.onmessage = async (event) => {
         // candidates through the match rather than the entire allocated chunk.
         const foundKey = Number(found) >>> 0;
         const checked = Math.max(1, Math.min(count, foundKey - start + 1));
-        self.postMessage({ type: "progress", delta: checked });
-        self.postMessage({ type: "found", key: foundKey, tested: start + checked });
+        // Include earlier completed chunks that have not reached the UI yet.
+        self.postMessage({ type: "progress", delta: pendingProgress + checked });
+        self.postMessage({ type: "found", key: foundKey });
         return;
       }
       pendingProgress += count;
