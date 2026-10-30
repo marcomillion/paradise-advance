@@ -19,7 +19,7 @@ Not yet implemented / known limitations:
 - Real boot ROM behavior and the chip's full memory aliases / MMIO bus dispatch.
 - Hardware peripherals wired to the CPU, including DMA/display scanout, timers, GPIO/button controls, SPI and flash controller. The current framebuffer bridge only snapshots SRAM; it does not emulate DMA or prove the retail display driver works.
 - Complete initialization behavior required by the retail firmware.
-- Browser UI integration with the WASM bindings and verified boot of the user's encrypted dump.
+- Verified boot of the user's encrypted dump. The browser UI now exposes the WASM CPU controls and an experimental SRAM framebuffer snapshot, but retail firmware has not been proven to boot.
 - Key recovery in-browser; the current loading API requires the correct device key from the user. A wrong key should fail reset-vector validation, but this is not a substitute for complete firmware validation.
 
 The current CPU is deliberately strict: unsupported instructions halt with an explicit fault instead of silently pretending to execute them. A valid load/decryption result does not mean the firmware has booted.
