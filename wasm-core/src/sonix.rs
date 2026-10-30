@@ -1,6 +1,7 @@
 //! Browser-safe parser for Sonix SNC73xx flash load tables.
 //! Adapted from infinition/capybara (GPL-3.0-only); no firmware or device key is bundled.
-//! This inspects metadata only. It does not decrypt or execute firmware.
+//! Includes the Sonix AES decryption path when the user supplies a device key; CPU boot is separate.
+use crate::aes::Aes;
 
 pub const TABLE_STRIDE: usize = 0x200;
 const MAGICS: [&[u8]; 6] = [b"SNC7320", b"SN323200", b"SNUR00", b"SN98300", b"SONIXDEV", b"SNCSPINF"];
@@ -87,5 +88,62 @@ mod tests {
     #[test] fn v3_encrypter_marker_means_already_decrypted() {
         let mut b=sample(); b[0x80..0x84].copy_from_slice(&ENCRYPTER_PENDING.to_le_bytes());
         assert!(!LoadTable::parse(&b,0).unwrap().encrypted);
+    }
+}
+
+/// Decrypts encrypted load-table regions in a private copy of a flash dump.
+/// Caller must supply the device key; this never modifies the user's original file.
+pub fn decrypt_dump_with_key(bytes: &[u8], device_key: u32) -> Result<Vec<u8>, &'static str> {
+    let mut flash=bytes.to_vec();
+    let tables=find_tables(&flash);
+    if tables.is_empty() { return Err("No valid Sonix load table found"); }
+    let plan: Vec<_>=tables.iter().filter(|t| t.encrypted).cloned().collect();
+    if plan.is_empty() { return Ok(flash); }
+    for table in plan {
+        for region in table.regions() {
+            decrypt_region(&mut flash,&table,region,device_key);
+        }
+    }
+    Ok(flash)
+}
+fn decrypt_region(flash:&mut [u8], table:&LoadTable, region:Region, device_key:u32) {
+    let off=(region.address & 0x00FF_FFFF) as usize;
+    let len=(region.length as usize) & !0xf;
+    if len==0 || off.checked_add(len).is_none_or(|end|end>flash.len()) { return; }
+    let mut key=[0u8;32]; // key material comes from the load table; retain byte order semantics
+    // Parse the key directly from the load table at the exact table offset.
+    key.copy_from_slice(&flash[table.offset+0x28..table.offset+0x48]);
+    key.reverse();
+    let mut iv=[0u8;16]; iv.copy_from_slice(&key[0x10..0x20]);
+    let dk=device_key.to_be_bytes();
+    for (i,b) in iv.iter_mut().enumerate(){*b^=dk[i%4];}
+    let key128:[u8;16]=key[0..16].try_into().unwrap();
+    let iv=Aes::new(&key128).encrypt_block(&iv);
+    let aes=Aes::new(&key);
+    match table.mode {
+        CipherMode::Cbc => {
+            const SLICE:usize=0x1000;
+            for start in (0..len).step_by(SLICE) {
+                let mut prev=iv; let end=(start+SLICE).min(len);
+                for b in (start..end).step_by(16) {
+                    let mut ct:[u8;16]=flash[off+b..off+b+16].try_into().unwrap();
+                    ct.reverse(); let mut pt=aes.decrypt_block(&ct);
+                    for i in 0..16 {pt[i]^=prev[i];}
+                    prev=ct; pt.reverse(); flash[off+b..off+b+16].copy_from_slice(&pt);
+                }
+            }
+        }
+        CipherMode::Ofb => {
+            let mut stream=iv;
+            for b in (0..len).step_by(16) {
+                stream=aes.encrypt_block(&stream);
+                for w in 0..4 {
+                    let s=u32::from_le_bytes(stream[(3-w)*4..(3-w)*4+4].try_into().unwrap());
+                    let p=off+b+w*4;
+                    let v=u32::from_le_bytes(flash[p..p+4].try_into().unwrap());
+                    flash[p..p+4].copy_from_slice(&(v^s.swap_bytes()).to_le_bytes());
+                }
+            }
+        }
     }
 }
