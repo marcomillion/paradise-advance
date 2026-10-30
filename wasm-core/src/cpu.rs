@@ -441,11 +441,15 @@ impl ThumbCpu {
                 let opkind=(op>>8)&3;
                 let rs=((op>>3)&15) as usize;
                 let rd=((op&7)|((op>>4)&8)) as usize;
+                // In Thumb high-register operations, reading PC yields the
+                // current instruction address plus four, not the stored PC.
+                let source=if rs==15 {pc.wrapping_add(4)} else {self.r[rs]};
+                let destination=if rd==15 {pc.wrapping_add(4)} else {self.r[rd]};
                 match opkind {
-                    0=>{let v=self.r[rd].wrapping_add(self.r[rs]);if rd==15 {self.r[15]=v&!1;} else {self.r[rd]=v;}},
-                    1=>{let a=self.r[rd];let b=self.r[rs];self.set_sub_flags(a,b,a.wrapping_sub(b));},
-                    2=>{let v=self.r[rs];if rd==15 {self.r[15]=v&!1;} else {self.r[rd]=v;}},
-                    3=>{let target=self.r[rs];if op&0x0080!=0 {self.r[14]=next|1;}self.r[15]=target&!1;},
+                    0=>{let v=destination.wrapping_add(source);if rd==15 {self.r[15]=v&!1;} else {self.r[rd]=v;}},
+                    1=>{self.set_sub_flags(destination,source,destination.wrapping_sub(source));},
+                    2=>{if rd==15 {self.r[15]=source&!1;} else {self.r[rd]=source;}},
+                    3=>{if op&0x0080!=0 {self.r[14]=next|1;}self.r[15]=source&!1;},
                     _=>{}
                 }
             },
@@ -691,6 +695,23 @@ mod tests {
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[0],0);
         assert!(!c.c); // counts greater than 32 clear carry.
+    }
+
+    #[test]
+    fn high_register_operations_read_pc_as_current_address_plus_four() {
+        let mut m=MemoryStorage::new();
+        // MOV r0, pc (high-register MOV encoding).
+        m.pram[0..2].copy_from_slice(&0x4678u16.to_le_bytes());
+        let mut c=ThumbCpu::new();
+        c.r[15]=0;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[0],4);
+
+        // ADD r0, pc uses the same architectural PC operand.
+        m.pram[0..2].copy_from_slice(&0x4478u16.to_le_bytes());
+        c.r[15]=0; c.r[0]=0x20; c.halted=false; c.last_fault=None;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[0],0x24);
     }
 
     #[test]
