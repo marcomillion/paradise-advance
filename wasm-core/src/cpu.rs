@@ -661,6 +661,20 @@ mod tests {
     }
 
     #[test]
+    fn ldr_reads_systick_countflag_then_clears_device_flag() {
+        let mut m=MemoryStorage::new();
+        m.pram[0..2].copy_from_slice(&0x6808u16.to_le_bytes()); // LDR r0, [r1, #0]
+        m.systick_ctrl=(1<<16)|2; // COUNTFLAG set, timer disabled
+        let mut c=ThumbCpu::new();
+        c.r[1]=0xE000_E010;
+        c.r[15]=0;
+
+        assert!(c.step(&mut m).is_ok());
+        assert_ne!(c.r[0]&(1<<16),0); // instruction observed the old flag value
+        assert_eq!(m.systick_ctrl&(1<<16),0); // hardware clears it after the read
+    }
+
+    #[test]
     fn primask_defers_pending_systick_until_interrupts_are_enabled() {
         let mut m=MemoryStorage::new();
         m.pram[0..6].copy_from_slice(&[0x30,0xBF,0x2A,0x20,0x62,0xB6]); // WFI; MOVS r0,#42; CPSIE i
