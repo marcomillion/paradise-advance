@@ -41,6 +41,27 @@ test('sprite editor can paint a pixel and export a project JSON', async ({ page 
   expect(download.suggestedFilename()).toMatch(/\.json$/);
 });
 
+test('local gallery imports, exports, and removes a sprite draft', async ({ page }) => {
+  const project = {
+    format: 'paradise-mod-studio-sprite',
+    version: 1,
+    name: 'Gallery Draft',
+    width: 2,
+    height: 2,
+    palette: ['#ff0000', '#00ff00'],
+    pixels: ['#ff0000', null, null, '#00ff00']
+  };
+  await page.locator('#galleryInput').setInputFiles({
+    name: 'gallery-draft.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(project))
+  });
+  await expect(page.locator('#galleryGrid')).toContainText('Gallery Draft');
+  await expect(page.locator('#galleryGrid').getByRole('button', { name: 'Export project JSON' })).toBeVisible();
+  await page.locator('#galleryGrid').getByRole('button', { name: 'Remove draft' }).click();
+  await expect(page.locator('#galleryGrid')).toContainText('The gallery is empty.');
+});
+
 test('emulator status reports the browser core instead of showing a fake pet', async ({ page }) => {
   await page.locator('[data-view="emulator"]').click();
   await expect(page.locator('#emulatorStatusTitle')).toHaveText('WASM core ready · awaiting firmware', { timeout: 15_000 });
