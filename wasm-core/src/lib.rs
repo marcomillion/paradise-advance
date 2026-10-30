@@ -110,24 +110,37 @@ impl BrowserCpu {
         let decrypted=decrypt_dump_with_key(bytes,device_key).map_err(JsValue::from_str)?;
         let table=find_tables(&decrypted).into_iter().next()
             .ok_or_else(||JsValue::from_str("No valid Sonix load table found"))?;
-        self.memory.load_flash(&decrypted).map_err(JsValue::from_str)?;
+        // Validate the decrypted user region before mutating emulator state. A wrong key
+        // or malformed vector table must not leave a half-loaded flash/PRAM image behind.
         let off=(table.user_code.address & 0x00FF_FFFF) as usize;
         let end=off.checked_add(table.user_code.length as usize)
             .ok_or_else(||JsValue::from_str("Firmware region address overflow"))?;
         let region=decrypted.get(off..end)
             .ok_or_else(||JsValue::from_str("Declared user-code region is outside the dump"))?;
-        self.memory.load_pram(region);
-        let stack_pointer=self.memory.read_u32(0);
-        let reset_vector=self.memory.read_u32(4);
+        if region.len()<8 {
+            return Err(JsValue::from_str("User-code region is too short to contain its initial vectors."));
+        }
+        let stack_pointer=u32::from_le_bytes(region[0..4].try_into().unwrap());
+        let reset_vector=u32::from_le_bytes(region[4..8].try_into().unwrap());
         if reset_vector&1==0 {
             return Err(JsValue::from_str("User-code reset vector is not Thumb; device key may be incorrect."));
         }
         if (reset_vector&!1)>=table.user_code.length || (reset_vector&!1)>=crate::memory::PRAM_SIZE as u32 {
             return Err(JsValue::from_str("Reset vector points outside the loaded user-code region; device key may be incorrect."));
         }
-        if stack_pointer==0 || stack_pointer&3!=0 {
-            return Err(JsValue::from_str("Initial stack pointer is invalid; device key may be incorrect."));
+        let sram_start=crate::memory::SRAM_BASE;
+        let sram_end=sram_start+crate::memory::SRAM_SIZE as u32;
+        let mailbox_start=crate::memory::MAILBOX_BASE;
+        let mailbox_end=mailbox_start+crate::memory::MAILBOX_SIZE as u32;
+        let stack_in_ram=(sram_start..=sram_end).contains(&stack_pointer)
+            || (mailbox_start..=mailbox_end).contains(&stack_pointer);
+        if !stack_in_ram || stack_pointer&3!=0 {
+            return Err(JsValue::from_str("Initial stack pointer is outside supported RAM or is not 4-byte aligned; device key may be incorrect."));
         }
+
+        // Commit the validated image only after every structural check succeeds.
+        self.memory.load_flash(&decrypted).map_err(JsValue::from_str)?;
+        self.memory.load_pram(region);
         self.cpu.reset_from_vectors(&self.memory,0);
         self.display = DisplayController::new();
         Ok(())
@@ -265,5 +278,28 @@ mod browser_integration_tests {
         let mut cpu = BrowserCpu::new();
         let error = cpu.load_sonix_firmware(&image, 0).unwrap_err().as_string().unwrap();
         assert!(error.contains("outside the loaded user-code region"));
+    }
+
+    #[test]
+    fn rejected_firmware_does_not_partially_replace_emulator_memory() {
+        let mut cpu = BrowserCpu::new();
+        cpu.memory.pram[0] = 0xA5;
+        cpu.memory.flash[0] = 0x5A;
+
+        let mut image = vec![0xFFu8; crate::memory::FLASH_SIZE];
+        image[..8].copy_from_slice(b"SONIXDEV");
+        image[8..12].copy_from_slice(&0x12u32.to_le_bytes());
+        image[0x10..0x14].copy_from_slice(&0x6000_1000u32.to_le_bytes());
+        image[0x14..0x18].copy_from_slice(&0x100u32.to_le_bytes());
+        image[0x1F8..0x1FC].copy_from_slice(&0x5A5A_0033u32.to_le_bytes());
+        // Invalid, misaligned stack pointer should reject the image before any state is changed.
+        image[0x1000..0x1004].copy_from_slice(&0x1800_0002u32.to_le_bytes());
+        image[0x1004..0x1008].copy_from_slice(&0x0000_0101u32.to_le_bytes());
+
+        let mut cpu = cpu;
+        let error = cpu.load_sonix_firmware(&image, 0).unwrap_err().as_string().unwrap();
+        assert!(error.contains("Initial stack pointer"));
+        assert_eq!(cpu.memory.pram[0], 0xA5);
+        assert_eq!(cpu.memory.flash[0], 0x5A);
     }
 }
