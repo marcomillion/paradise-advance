@@ -122,6 +122,11 @@ impl BrowserCpu {
     pub fn reset_from_vectors(&mut self, vector_base:u32) {
         self.cpu.reset_from_vectors(&self.memory,vector_base);
     }
+    pub fn set_button(&mut self,index:u32,pressed:bool) -> Result<(),JsValue> {
+        if !self.memory.set_button(index as usize,pressed) { return Err(JsValue::from_str("Button index must be 0..2")); }
+        Ok(())
+    }
+    pub fn rotate_dial(&mut self,delta:i32) { self.memory.rotate_dial(delta); }
     pub fn set_register(&mut self,index:u32,value:u32) -> Result<(),JsValue> {
         if index>=16 {return Err(JsValue::from_str("Register index must be 0..15"));}
         self.cpu.r[index as usize]=value; Ok(())
