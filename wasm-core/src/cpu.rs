@@ -585,7 +585,7 @@ impl ThumbCpu {
             self.enter_exception(m,74); // DMA IRQ 58 + core exception offset 16
         }
     }
-    fn exception_return(&mut self,m:&MemoryStorage) {
+    fn exception_return(&mut self,m:&mut MemoryStorage) {
         let mut sp=self.r[13];
         let mut pop=|| { let value=m.read_cpu_u32(sp); sp=sp.wrapping_add(4); value };
         self.r[0]=pop(); self.r[1]=pop(); self.r[2]=pop(); self.r[3]=pop();
