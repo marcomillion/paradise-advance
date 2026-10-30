@@ -39,7 +39,12 @@ impl MemoryStorage {
         Self { pram:vec![0;PRAM_SIZE], boot_rom, sram:vec![0;SRAM_SIZE],
             mailbox:vec![0;MAILBOX_SIZE], flash:vec![0xFF;FLASH_SIZE] }
     }
-    pub fn load_pram(&mut self, bytes: &[u8]) {\n        self.pram.fill(0);\n        let len=bytes.len().min(self.pram.len());\n        self.pram[..len].copy_from_slice(&bytes[..len]);\n    }\n    pub fn load_flash(&mut self, bytes: &[u8]) -> Result<(), &'static str> {
+    pub fn load_pram(&mut self, bytes: &[u8]) {
+        self.pram.fill(0);
+        let len = bytes.len().min(self.pram.len());
+        self.pram[..len].copy_from_slice(&bytes[..len]);
+    }
+    pub fn load_flash(&mut self, bytes: &[u8]) -> Result<(), &'static str> {
         if bytes.len() != FLASH_SIZE { return Err("flash dump must be exactly 16 MiB"); }
         self.flash.copy_from_slice(bytes); Ok(())
     }
