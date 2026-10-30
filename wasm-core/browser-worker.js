@@ -21,11 +21,16 @@ self.onmessage = async (event) => {
     if (!ready) throw new Error("WASM core is not initialized.");
     if (type === "cancel-key-search") {
       keySearchToken++;
+      if (keySearchRequestId !== null) {
+        self.postMessage({ id: keySearchRequestId, ok: true, result: { cancelled: true }});
+        keySearchRequestId = null;
+      }
       self.postMessage({ id, ok: true, result: { cancelled: true }});
       return;
     }
     if (type === "search-key") {
       const token = ++keySearchToken;
+      keySearchRequestId = id;
       const bytes = new Uint8Array(payload.bytes);
       const chunkSize = Number(payload.chunkSize) || 20000;
       let start = Number(payload.start) || 0;
@@ -35,6 +40,7 @@ self.onmessage = async (event) => {
         const found = search_device_key_candidates(bytes, start >>> 0, count);
         if (found !== undefined && found !== null) {
           self.postMessage({ id, ok: true, result: { found: true, key: Number(found) >>> 0, tested: start + count }});
+          keySearchRequestId = null;
           return;
         }
         start += count;
@@ -42,6 +48,7 @@ self.onmessage = async (event) => {
         await new Promise(resolve => setTimeout(resolve, 0));
       }
       if (token === keySearchToken) self.postMessage({ id, ok: true, result: { found: false, exhausted: true, tested: start }});
+      if (keySearchRequestId === id) keySearchRequestId = null;
       return;
     }
     if (type === "inspect") {
