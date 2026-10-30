@@ -216,7 +216,7 @@ mod tests {
     fn executes_asr_immediate_with_sign_extension() {
         let mut m=MemoryStorage::new();
         // ASRS r0, r1, #4
-        m.write_u8(0,0x48); m.write_u8(1,0x10);
+        m.write_u8(0,0x08); m.write_u8(1,0x11);
         let mut c=ThumbCpu::new(); c.r[15]=0; c.r[1]=0x8000_0000;
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[0],0xF800_0000);
