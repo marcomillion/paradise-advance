@@ -91,7 +91,7 @@ impl ThumbCpu {
             let rn=(op1&0xF) as usize;let rd=((op2>>8)&0xF) as usize;let rt=((op2>>12)&0xF) as usize;
             let address=self.r[rn].wrapping_add(((op2&0xFF) as u32)<<2);
             if self.exclusive_address==Some(address) {
-                let value=self.r[rt];for i in 0..4 {m.write_u8(address+i,(value>>(i*8)) as u8);}
+                let value=self.r[rt];m.write_u32(address,value);
                 self.r[rd]=0;
             } else {self.r[rd]=1;}
             self.exclusive_address=None;
@@ -107,7 +107,7 @@ impl ThumbCpu {
                 let base=self.r[rn];let offset=if u!=0 {base.wrapping_add(imm)}else{base.wrapping_sub(imm)};
                 let address=if p!=0 {offset}else{base};
                 if is_load {self.r[rt]=m.read_cpu_u32(address);self.r[rt2]=m.read_cpu_u32(address.wrapping_add(4));}
-                else {let a=self.r[rt];let b=self.r[rt2];for i in 0..4 {m.write_u8(address+i,(a>>(i*8)) as u8);m.write_u8(address+4+i,(b>>(i*8)) as u8);}}
+                else {let a=self.r[rt];let b=self.r[rt2];m.write_u32(address,a);m.write_u32(address.wrapping_add(4),b);}
                 if writeback!=0 {self.r[rn]=offset;}
                 self.instructions=self.instructions.wrapping_add(1);return Ok(());
             }
@@ -120,7 +120,7 @@ impl ThumbCpu {
             for reg in 0..16 {
                 if list&(1<<reg)==0 {continue;}
                 if is_load {self.r[reg]=m.read_cpu_u32(address);}
-                else {let value=self.r[reg];for i in 0..4 {m.write_u8(address+i,(value>>(i*8)) as u8);}}
+                else {let value=self.r[reg];m.write_u32(address,value);}
                 address=address.wrapping_add(4);
             }
             if writeback {self.r[rn]=if decrement_before {base.wrapping_sub(4*count)}else{base.wrapping_add(4*count)};}
@@ -338,7 +338,7 @@ impl ThumbCpu {
             let address=self.r[rn].wrapping_add((op2&0x0fff) as u32);
             match transfer {
                 0xF8D0 => { let value=m.read_cpu_u32(address); if rt==15 {self.r[15]=value&!1;} else {self.r[rt]=value;} },
-                0xF8C0 => { let value=self.r[rt]; for i in 0..4 {m.write_u8(address+i,(value>>(i*8)) as u8);} },
+                0xF8C0 => { let value=self.r[rt]; m.write_u32(address,value); },
                 0xF890 => { self.r[rt]=m.read_cpu_u8(address) as u32; },
                 0xF880 => { m.write_u8(address,self.r[rt] as u8); },
                 0xF8B0 => { self.r[rt]=m.read_cpu_u8(address) as u32|((m.read_cpu_u8(address+1) as u32)<<8); },
@@ -466,7 +466,7 @@ impl ThumbCpu {
             0x5000..=0x5FFF => {
                 let opkind=(op>>9)&7; let addr=self.r[rn].wrapping_add(self.r[rm]);
                 match opkind {
-                    0=>{let v=self.r[rd];for i in 0..4 {m.write_u8(addr+i,(v>>(i*8)) as u8);}},
+                    0=>{let v=self.r[rd];m.write_u32(addr,v);},
                     1=>{m.write_u8(addr,self.r[rd] as u8);m.write_u8(addr+1,(self.r[rd]>>8) as u8);},
                     2=>{m.write_u8(addr,self.r[rd] as u8);},
                     3=>{self.r[rd]=m.read_cpu_u8(addr) as i8 as i32 as u32;},
@@ -478,7 +478,7 @@ impl ThumbCpu {
                 }
             },
             0x4800..=0x4FFF => { let d=((op>>8)&7) as usize; let addr=((pc.wrapping_add(4))&!3).wrapping_add(((op&0xff) as u32)*4); self.r[d]=m.read_cpu_u32(addr); },
-            0x6000..=0x67FF => { let addr=self.r[rn].wrapping_add(((op>>6&31) as u32)*4); m.write_u8(addr,self.r[rd] as u8); m.write_u8(addr+1,(self.r[rd]>>8) as u8); m.write_u8(addr+2,(self.r[rd]>>16) as u8); m.write_u8(addr+3,(self.r[rd]>>24) as u8); },
+            0x6000..=0x67FF => { let addr=self.r[rn].wrapping_add(((op>>6&31) as u32)*4); m.write_u32(addr,self.r[rd]); },
             0x6800..=0x6FFF => { let addr=self.r[rn].wrapping_add(((op>>6&31) as u32)*4); self.r[rd]=m.read_cpu_u32(addr); },
             0x7000..=0x77FF => { let addr=self.r[rn].wrapping_add(((op>>6&31) as u32)); m.write_u8(addr,self.r[rd] as u8); },
             0x7800..=0x7FFF => { let addr=self.r[rn].wrapping_add(((op>>6&31) as u32)); self.r[rd]=m.read_cpu_u8(addr) as u32; },
@@ -489,8 +489,8 @@ impl ThumbCpu {
             },
             0xB400..=0xB5FF => {
                 let extra=op&0x0100!=0; let list=op&0xff;
-                if extra {self.r[13]=self.r[13].wrapping_sub(4);let v=self.r[14];for i in 0..4 {m.write_u8(self.r[13]+i,(v>>(i*8)) as u8);}}
-                for reg in (0..8).rev() {if list&(1<<reg)!=0 {self.r[13]=self.r[13].wrapping_sub(4);let v=self.r[reg];for i in 0..4 {m.write_u8(self.r[13]+i,(v>>(i*8)) as u8);}}}
+                if extra {self.r[13]=self.r[13].wrapping_sub(4);let v=self.r[14];m.write_u32(self.r[13],v);}
+                for reg in (0..8).rev() {if list&(1<<reg)!=0 {self.r[13]=self.r[13].wrapping_sub(4);let v=self.r[reg];m.write_u32(self.r[13],v);}}
             },
             0xBC00..=0xBDFF => {
                 let extra=op&0x0100!=0;let list=op&0xff;
@@ -499,7 +499,7 @@ impl ThumbCpu {
             },
             0xC000..=0xCFFF => {
                 let load=op&0x0800!=0;let base=((op>>8)&7) as usize;let list=op&0xff;let mut addr=self.r[base];
-                for reg in 0..8 {if list&(1<<reg)!=0 {if load {self.r[reg]=m.read_cpu_u32(addr);}else{let v=self.r[reg];for i in 0..4 {m.write_u8(addr+i,(v>>(i*8)) as u8);}}addr=addr.wrapping_add(4);}}
+                for reg in 0..8 {if list&(1<<reg)!=0 {if load {self.r[reg]=m.read_cpu_u32(addr);}else{let v=self.r[reg];m.write_u32(addr,v);}addr=addr.wrapping_add(4);}}
                 if list!=0 {self.r[base]=addr;}
             },
             0x9000..=0x9FFF => { let d=((op>>8)&7) as usize; let addr=self.r[13].wrapping_add(((op&0xff) as u32)*4); if op&0x0800!=0 {self.r[d]=m.read_cpu_u32(addr);} else {let v=self.r[d];for i in 0..4 {m.write_u8(addr+i,(v>>(i*8)) as u8);}} },
@@ -558,7 +558,7 @@ impl ThumbCpu {
         let frame=[self.r[0],self.r[1],self.r[2],self.r[3],self.r[12],self.r[14],self.r[15],xpsr];
         for value in frame.iter().rev() {
             sp=sp.wrapping_sub(4);
-            for i in 0..4 { m.write_u8(sp+i,(*value>>(i*8)) as u8); }
+            m.write_u32(sp,*value);
         }
         self.r[13]=sp;
         self.r[14]=0xFFFF_FFF9;

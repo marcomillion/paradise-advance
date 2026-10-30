@@ -33,6 +33,8 @@ pub struct MemoryStorage {
     pub pram: Vec<u8>, pub boot_rom: Vec<u8>, pub sram: Vec<u8>,
     pub mailbox: Vec<u8>, pub flash: Vec<u8>,
     pub gpio_buttons: [bool; 4], pub dial_counter: i32,
+    pub gpio_port_data: [u32; 3], pub gpio_port_direction: [u32; 3], pub gpio_port_mode: [u32; 3],
+    pub gpio_port_irq_enable: [u32; 3], pub gpio_port_irq_status: [u32; 3],
     pub dma_registers: [u32; 78], pub panel_frame: Option<Vec<u16>>, pub dma_irq_pending: bool,
     pub nvic_iser: [u32; 2],
     pub systick_ctrl: u32, pub systick_reload: u32, pub systick_current: u32, pub systick_pending: bool,
@@ -46,6 +48,8 @@ impl MemoryStorage {
         Self { pram:vec![0;PRAM_SIZE], boot_rom, sram:vec![0;SRAM_SIZE],
             mailbox:vec![0;MAILBOX_SIZE], flash:vec![0xFF;FLASH_SIZE],
             gpio_buttons:[false;4], dial_counter:0,
+            gpio_port_data:[0;3], gpio_port_direction:[0;3], gpio_port_mode:[0;3],
+            gpio_port_irq_enable:[0;3], gpio_port_irq_status:[0;3],
             dma_registers:[0;78], panel_frame:None, dma_irq_pending:false, nvic_iser:[0;2],
             systick_ctrl:0, systick_reload:0, systick_current:0, systick_pending:false }
     }
@@ -73,6 +77,56 @@ impl MemoryStorage {
         }
     }
     pub fn dma_irq_enabled(&self) -> bool { self.nvic_iser[1] & (1 << (58-32)) != 0 }
+    fn gpio_port_index(address: u32) -> Option<(usize,u32)> {
+        let base=match address {
+            0x4001_8000..=0x4001_8FFF => 0x4001_8000,
+            0x4001_9000..=0x4001_9FFF => 0x4001_9000,
+            0x4001_A000..=0x4001_AFFF => 0x4001_A000,
+            _ => return None,
+        };
+        Some((((base-0x4001_8000)/0x1000) as usize,address-base))
+    }
+    fn gpio_port_inputs(&self, port:usize) -> u32 {
+        let mut pins=u32::MAX;
+        if port==0 {
+            // Observed Paradise wiring: P0.8 dial push, P0.9 A, P0.10 C, P0.11 B.
+            for (index,pin) in [(3usize,8u32),(0,9),(2,10),(1,11)] {
+                if self.gpio_buttons[index] { pins &= !(1<<pin); }
+            }
+        } else if port==2 {
+            // Expose the dial as a two-bit Gray-code quadrature phase on P2.0/P2.1.
+            let phase=self.dial_counter.rem_euclid(4) as usize;
+            let gray=[0u32,1,3,2][phase];
+            pins=(pins&!3)|gray;
+        }
+        pins
+    }
+    fn gpio_port_read_reg(&self,port:usize,offset:u32)->u32 {
+        match offset {
+            0x00 => (self.gpio_port_data[port]&self.gpio_port_direction[port]) |
+                    (self.gpio_port_inputs(port)&!self.gpio_port_direction[port]),
+            0x04 => self.gpio_port_direction[port],
+            0x08 => self.gpio_port_mode[port],
+            0x18 => self.gpio_port_irq_enable[port],
+            0x1C => self.gpio_port_irq_status[port],
+            _ => 0,
+        }
+    }
+    fn gpio_port_write_reg(&mut self,port:usize,offset:u32,value:u32) {
+        match offset {
+            0x00 => self.gpio_port_data[port]=value,
+            0x04 => self.gpio_port_direction[port]=value,
+            0x08 => self.gpio_port_mode[port]=value,
+            0x18 => self.gpio_port_irq_enable[port]=value,
+            0x20 => self.gpio_port_irq_status[port]&=!value,
+            _ => {},
+        }
+    }
+    fn bitband_target(address:u32)->Option<(u32,u32)> {
+        if !(0x4200_0000..=0x43FF_FFFF).contains(&address) { return None; }
+        let delta=address-0x4200_0000;
+        Some((0x4000_0000+delta/32,(delta%32)/4))
+    }
     fn gpio_register(&self, offset: u32) -> u32 {
         match offset {
             0 => { let mut v=u32::MAX; for (i,pressed) in self.gpio_buttons.iter().enumerate() { if *pressed { v &= !(1<<i); } } v },
@@ -81,6 +135,14 @@ impl MemoryStorage {
         }
     }
     pub fn read_u8(&self, address: u32) -> u8 {
+        if (0x4200_0000..=0x43FF_FFFF).contains(&address) {
+            let word=self.read_u32(address & !3);
+            return ((word >> ((address&3)*8)) & 0xFF) as u8;
+        }
+        if let Some((port,offset))=Self::gpio_port_index(address) {
+            let reg=self.gpio_port_read_reg(port,offset&!3);
+            return ((reg >> ((offset&3)*8)) & 0xFF) as u8;
+        }
         if (0xE000_E010..0xE000_E020).contains(&address) {
             let offset=address-0xE000_E010;
             let reg=match offset/4 {0=>self.systick_ctrl,1=>self.systick_reload,2=>self.systick_current,3=>0x00FF_FFFF,_=>0};
@@ -128,10 +190,43 @@ impl MemoryStorage {
         value
     }
     pub fn read_u32(&self, address: u32) -> u32 {
+        if (0x4200_0000..=0x43FF_FFFF).contains(&address) {
+            if let Some((target,bit))=Self::bitband_target(address) { return ((self.read_u8(target)>>bit)&1) as u32; }
+        }
         u32::from_le_bytes([self.read_u8(address),self.read_u8(address.wrapping_add(1)),
             self.read_u8(address.wrapping_add(2)),self.read_u8(address.wrapping_add(3))])
     }
+    pub fn write_u32(&mut self,address:u32,value:u32)->bool {
+        if let Some((target,bit))=Self::bitband_target(address) {
+            if address&3!=0 { return false; }
+            let old=self.read_u8(target);
+            let new=if value&1!=0 {old|(1u8<<bit)} else {old&!(1u8<<bit)};
+            return self.write_u8(target,new);
+        }
+        let mut accepted=true;
+        for i in 0..4 { accepted &= self.write_u8(address.wrapping_add(i),(value>>(i*8)) as u8); }
+        accepted
+    }
     pub fn write_u8(&mut self, address: u32, value: u8) -> bool {
+        if (0x4200_0000..=0x43FF_FFFF).contains(&address) {
+            if address&3!=0 { return true; }
+            if let Some((target,bit))=Self::bitband_target(address) {
+                let old=self.read_u8(target);
+                let new=if value&1!=0 {old|(1u8<<bit)} else {old&!(1u8<<bit)};
+                return self.write_u8(target,new);
+            }
+        }
+        if let Some((port,offset))=Self::gpio_port_index(address) {
+            let shift=(offset&3)*8;
+            if (offset&!3)==0x20 { self.gpio_port_write_reg(port,0x20,(value as u32)<<shift); }
+            else {
+                let aligned=offset&!3;
+                let current=self.gpio_port_read_reg(port,aligned);
+                let mask=!(0xFFu32<<shift);
+                self.gpio_port_write_reg(port,aligned,(current&mask)|((value as u32)<<shift));
+            }
+            return true;
+        }
         if (0xE000_E010..0xE000_E020).contains(&address) {
             let offset=address-0xE000_E010; let shift=(offset&3)*8; let mask=!(0xffu32<<shift);
             match offset/4 {
@@ -252,6 +347,32 @@ mod tests {
         m.systick_ctrl|=1<<16;
         assert_ne!(m.read_cpu_u8(0xE000_E010)&1,0);
         assert_eq!(m.systick_ctrl&(1<<16),0);
+    }
+    #[test]
+    fn paradise_gpio_ports_expose_real_button_pins_and_dial_phase() {
+        let mut m=MemoryStorage::new();
+        assert_eq!(m.read_u32(0x4001_8000)&(1<<9),1<<9);
+        assert!(m.set_button(0,true));
+        assert_eq!(m.read_u32(0x4001_8000)&(1<<9),0);
+        assert!(m.set_button(1,true));
+        assert_eq!(m.read_u32(0x4001_8000)&(1<<11),0);
+        assert!(m.set_button(2,true));
+        assert_eq!(m.read_u32(0x4001_8000)&(1<<10),0);
+        m.rotate_dial(1);
+        assert_eq!(m.read_u32(0x4001_A000)&3,1);
+    }
+    #[test]
+    fn peripheral_bitband_alias_reads_and_writes_single_gpio_bits() {
+        let mut m=MemoryStorage::new();
+        let alias_for=|byte_address:u32,bit:u32| 0x4200_0000+(byte_address-0x4000_0000)*32+bit*4;
+        m.write_u32(0x4001_8004,1<<2);
+        let data_bit=alias_for(0x4001_8000,2);
+        assert!(m.write_u32(data_bit,1));
+        assert_eq!(m.read_u32(0x4001_8000)&(1<<2),1<<2);
+        assert_eq!(m.read_u32(data_bit),1);
+        assert!(m.write_u32(data_bit,0));
+        assert_eq!(m.read_u32(0x4001_8000)&(1<<2),0);
+        assert_eq!(m.read_u32(data_bit),0);
     }
     #[test]
     fn gpio_buttons_are_active_low_and_dial_is_readable() {
