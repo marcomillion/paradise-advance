@@ -150,3 +150,28 @@ impl BrowserCpu {
     pub fn last_fault(&self)->String {format!("{:?}",self.cpu.last_fault)}
 }
 impl Default for BrowserCpu {fn default()->Self{Self::new()}}
+
+#[cfg(test)]
+mod browser_integration_tests {
+    use super::*;
+    #[test]
+    fn cpu_framebuffer_snapshot_reads_sram_pixels() {
+        let mut cpu = BrowserCpu::new();
+        // The emulated LCD's configured framebuffer begins at SRAM + 0x8000.
+        cpu.memory.sram[0x8000..0x8002].copy_from_slice(&0x07E0u16.to_le_bytes());
+        cpu.memory.pram[0..2].copy_from_slice(&0xBF00u16.to_le_bytes()); // NOP
+        cpu.cpu.r[15] = 0;
+        cpu.step().unwrap();
+        let frame = cpu.display_rgba_framebuffer();
+        assert_eq!(&frame[0..4], &[0, 255, 0, 255]);
+        assert_eq!(cpu.instructions(), 1);
+    }
+
+    #[test]
+    fn framebuffer_dimensions_are_exposed_through_cpu() {
+        let cpu = BrowserCpu::new();
+        assert_eq!(cpu.display_width(), 128);
+        assert_eq!(cpu.display_height(), 128);
+        assert_eq!(cpu.display_rgba_framebuffer().len(), 128 * 128 * 4);
+    }
+}
