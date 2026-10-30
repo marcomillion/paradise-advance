@@ -41,6 +41,14 @@ test('sprite editor can paint a pixel and export a project JSON', async ({ page 
   expect(download.suggestedFilename()).toMatch(/\.json$/);
 });
 
+test('emulator firmware button opens the local file picker', async ({ page }) => {
+  await page.locator('[data-view="emulator"]').click();
+  const chooserPromise = page.waitForEvent('filechooser');
+  await page.locator('#emulatorLoadFirmwareBtn').click();
+  const chooser = await chooserPromise;
+  expect(chooser).toBeTruthy();
+});
+
 test('keyboard zoom-dial input emits press and release events', async ({ page }) => {
   await page.locator('[data-view="emulator"]').click();
   await page.evaluate(() => {
