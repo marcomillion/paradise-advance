@@ -61,11 +61,15 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Preserve the just-built package, then base its commit on the latest main.
+          mkdir -p /tmp/paradise-wasm-pkg
+          cp -a wasm-core/pkg/. /tmp/paradise-wasm-pkg/
+          git fetch origin main
+          git reset --hard origin/main
+          cp -a /tmp/paradise-wasm-pkg/. wasm-core/pkg/
           git add -f wasm-core/pkg/
           if ! git diff --cached --quiet; then
             git commit -m "Build browser WASM package"
-            git fetch origin main
-            git rebase origin/main
             git push origin HEAD:main
           fi
       - name: Upload browser package
