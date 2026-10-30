@@ -1,0 +1,16 @@
+[package]
+name = "paradise-wasm-core"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "Portable browser-facing hardware components for the Paradise firmware emulator"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+
+[profile.release]
+lto = true
+opt-level = "s"
