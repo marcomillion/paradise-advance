@@ -306,6 +306,13 @@ mod browser_integration_tests {
         assert_eq!(cpu.instructions(), 3);
         assert!(!cpu.halted());
         assert_eq!(cpu.register(15).unwrap(), 0x102);
+
+        // If the load table declares an SRAM image, its address becomes the XIP base.
+        image[0x90..0x94].copy_from_slice(&0x6002_0000u32.to_le_bytes());
+        image[0x94..0x98].copy_from_slice(&0x1000u32.to_le_bytes());
+        let mut cpu_with_sram_region=BrowserCpu::new();
+        cpu_with_sram_region.load_sonix_firmware(&image,0).unwrap();
+        assert_eq!(cpu_with_sram_region.memory.read_u32(crate::memory::MAILBOX_BASE+0x818),0x6002_0000);
     }
 
     #[test]
