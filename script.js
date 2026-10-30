@@ -1167,6 +1167,7 @@ $("#edit-sprite").addEventListener("click", () => {
 
     updateCanvasInfo();
     updateSimulator();
+    updateZoom();
 
     $$(".nav-button").forEach((button) => {
         button.classList.toggle(
