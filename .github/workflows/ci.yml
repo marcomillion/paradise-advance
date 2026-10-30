@@ -25,6 +25,7 @@ jobs:
           node --check emulator.js
           node --check build.js
           node --input-type=module --check < wasm-core/browser-worker.js
+          node --input-type=module --check < wasm-core/key-search-worker.js
           node --check playwright.config.js
       - name: Install browser test dependencies
         run: npm install
