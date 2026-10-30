@@ -345,6 +345,11 @@
       peakRate = Math.max(peakRate, rate);
       const eta = rate > 0 ? Math.max(0, keySpace - tested) / rate : Infinity;
       renderMetrics(elapsedSeconds, rate, eta);
+      // The ETA describes the active search, not a hypothetical full scan
+      // after the search has already found a key, been cancelled, or failed.
+      if (foundKey !== null) setMetric('keySearchEta', 'Key found');
+      else if (keySearchCancelled) setMetric('keySearchEta', 'Cancelled');
+      else if (failure) setMetric('keySearchEta', 'Failed');
       terminateWorkers();
       cancelActiveKeySearch = null;
       searchBtn.disabled = false;
