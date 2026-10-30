@@ -12,6 +12,7 @@ const required = [
   'app.js',
   'emulator.js',
   'wasm-core/browser-worker.js',
+  'wasm-core/key-search-worker.js',
   'wasm-core/pkg/paradise_wasm_core.js',
   'wasm-core/pkg/paradise_wasm_core_bg.wasm'
 ];
@@ -33,10 +34,9 @@ for (const relative of ['index.html', 'styles.css', 'app.js', 'emulator.js', 'RE
 const workerOut = path.join(out, 'wasm-core');
 const pkgOut = path.join(workerOut, 'pkg');
 fs.mkdirSync(pkgOut, { recursive: true });
-fs.copyFileSync(
-  path.join(root, 'wasm-core/browser-worker.js'),
-  path.join(workerOut, 'browser-worker.js')
-);
+for (const worker of ['browser-worker.js', 'key-search-worker.js']) {
+  fs.copyFileSync(path.join(root, 'wasm-core', worker), path.join(workerOut, worker));
+}
 fs.cpSync(path.join(root, 'wasm-core/pkg'), pkgOut, { recursive: true });
 
 for (const relative of required) {
