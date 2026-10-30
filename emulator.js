@@ -223,11 +223,19 @@
       if (inputStatus) inputStatus.textContent = 'Dial input error: ' + (error.message || String(error));
     });
   }, { passive: false });
-  dial?.addEventListener('click', () => {
-    if (inputStatus) inputStatus.textContent = cpuLoaded
-      ? 'Dial rotation is connected to the initial GPIO model; dial-press hardware is not mapped yet.'
-      : 'Load firmware before sending emulated input.';
-  });
+  const sendDialPress = pressed => {
+    if (!cpuLoaded) {
+      if (inputStatus) inputStatus.textContent = 'Load firmware before sending emulated input.';
+      return;
+    }
+    request('input', { button: 3, pressed }).catch(error => {
+      if (inputStatus) inputStatus.textContent = 'Dial input error: ' + (error.message || String(error));
+    });
+  };
+  dial?.addEventListener('pointerdown', event => { event.preventDefault(); sendDialPress(true); });
+  dial?.addEventListener('pointerup', () => sendDialPress(false));
+  dial?.addEventListener('pointerleave', () => sendDialPress(false));
+  dial?.addEventListener('pointercancel', () => sendDialPress(false));
   startWorker().then(() => {
     setStatus('WASM core ready · awaiting firmware', 'The browser package loaded successfully. Choose a local 16 MiB dump to inspect it. Firmware execution is experimental; no simulated pet is shown.');
   }).catch(error => {
