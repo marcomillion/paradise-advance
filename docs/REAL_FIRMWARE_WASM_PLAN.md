@@ -10,7 +10,7 @@ The browser must execute the user's own 16 MiB SONIXDEV firmware dump on an emul
 - First eight bytes: `SONIXDEV`
 - SHA-256: `e1c22b3e682ac83a9189486b69970057b9d757131e95e4aa6c4b9a59356646ee`
 
-The dump stays in the user's browser. Never commit it, upload it, or include a device key in this repository.
+The load table at offset `0x000000` reports version `0x5A5A0033` (V3 format), configuration `0x13`, and the encrypted flag set. Its user-code region starts at `0x60001000` with a declared length of `0x10000`; the table lists no non-empty SRAM or DPD code region. The dump stays in the user's browser. Never commit it, upload it, or include a device key in this repository.
 
 ## Core research
 
