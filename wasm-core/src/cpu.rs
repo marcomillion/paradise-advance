@@ -45,7 +45,11 @@ impl ThumbCpu {
     pub fn reset_from_vectors(&mut self, memory:&MemoryStorage, vector_base:u32) {
         self.r=[0;16]; self.r[13]=memory.read_u32(vector_base);
         self.r[15]=memory.read_u32(vector_base.wrapping_add(4)) & !1;
-        self.halted=false; self.last_fault=None; self.instructions=0; self.in_irq=false; self.primask=false; self.itstate=0; self.ipsr=0; self.exclusive_address=None;
+        // Reset returns APSR and execution-control state to architectural defaults too.
+        self.n=false; self.z=false; self.c=false; self.v=false;
+        self.halted=false; self.last_fault=None; self.instructions=0;
+        self.in_irq=false; self.primask=false; self.itstate=0; self.ipsr=0;
+        self.exclusive_address=None;
     }
     fn set_nz(&mut self, value:u32) { self.n=value>>31!=0; self.z=value==0; }
     fn set_add_flags(&mut self,a:u32,b:u32,result:u32) { self.set_nz(result); self.c=(a as u64+b as u64)>u32::MAX as u64; self.v=(!(a^b)&(a^result)&0x8000_0000)!=0; }
@@ -599,6 +603,28 @@ impl Default for ThumbCpu { fn default()->Self {Self::new()} }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn reset_from_vectors_clears_stale_flags_and_execution_state() {
+        let mut m=MemoryStorage::new();
+        m.write_u8(0,0x00); m.write_u8(1,0xBF);
+        m.write_u8(0x100,0x00); m.write_u8(0x101,0xBF);
+        m.write_u8(0x200,0x00); m.write_u8(0x201,0xBF);
+        m.write_u8(0x20,0x00); m.write_u8(0x21,0x01); // vector PC = 0x100 (Thumb)
+        m.write_u8(0x1C,0x00); m.write_u8(0x1D,0x00); m.write_u8(0x1E,0x01); m.write_u8(0x1F,0x18); // SP = 0x18010000
+        let mut c=ThumbCpu::new();
+        c.n=true; c.z=true; c.c=true; c.v=true;
+        c.halted=true; c.last_fault=Some(CpuFault::UnsupportedInstruction(0xFFFF));
+        c.instructions=99; c.primask=true; c.itstate=0x08; c.ipsr=15;
+        c.exclusive_address=Some(0x100);
+        c.reset_from_vectors(&m,0x1C);
+        assert_eq!(c.r[13],0x1801_0000);
+        assert_eq!(c.r[15],0x100);
+        assert!(!c.n && !c.z && !c.c && !c.v);
+        assert!(!c.halted); assert_eq!(c.last_fault,None); assert_eq!(c.instructions,0);
+        assert!(!c.primask); assert_eq!(c.itstate,0); assert_eq!(c.ipsr,0);
+        assert_eq!(c.exclusive_address,None); assert!(!c.in_irq);
+    }
+
     #[test]
     fn executes_movs_and_adds_immediate() {
         let mut m=MemoryStorage::new();
