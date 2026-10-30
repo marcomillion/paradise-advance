@@ -1,23 +1,29 @@
 PARADISE WASM CORE — PORT IN PROGRESS
 
-This is the first portable component extracted for the real firmware emulator. It is NOT yet a firmware emulator and cannot boot the supplied dump.
+This is a portable Rust foundation for the real firmware emulator. It is NOT yet a bootable emulator.
 
-Current component:
-- Rust RGB565 display controller model based on the corresponding hardware component in infinition/capybara (GPL-3.0-only).
-- wasm-bindgen wrapper exposing a 128x128 RGBA framebuffer to browser JavaScript.
-- Unit tests for framebuffer size, RGB565 conversion, bounds checking, and frame transfer.
+Implemented and covered by CI:
+- RGB565 display controller model and wasm-bindgen RGBA framebuffer.
+- Sonix load-table parser for supported SNC73xx table versions.
+- 16 MiB firmware metadata inspection exposed to browser bindings.
+- AES-128/AES-256 primitive port from infinition/capybara (GPL-3.0-only).
+- Sonix encrypted-region decryption when the user supplies a 32-bit device key; operates on an in-memory copy and never writes firmware to the repository.
+- SNC73410 memory region definitions and byte-addressable PRAM, boot ROM, SRAM, mailbox and flash storage.
+- wasm-bindgen access to the memory model.
+- Unit tests for display conversion, memory mapping, reset-vector storage, parser validation and safe unencrypted-image handling.
 
-Not implemented yet:
-- ARMv7-M / Thumb CPU and exception controller
-- Memory bus, PRAM, SRAM, SPI flash, XIP and boot setup
-- Sonix load-table parser and AES decryption/device-key handling
-- DMA and the full hardware peripheral set
-- Input wiring, machine stepping, save states, and integration into the site
-- A compiled or tested .wasm artifact
+Still not implemented:
+- ARMv7-M / Thumb CPU and exception controller.
+- MMIO bus dispatch and CPU/peripheral cycle integration.
+- Real hardware boot ROM behavior and firmware initialization.
+- DMA and the complete hardware peripheral set wired to the CPU.
+- Browser input wiring, machine stepping, save states and site integration.
+- Verified boot of an encrypted Paradise dump. Decryption requires the correct device key, and successful decryption alone does not prove that the firmware boots.
 
-Build when Rust is available:
+Build/test:
   cargo test --manifest-path wasm-core/Cargo.toml
   rustup target add wasm32-unknown-unknown
   cargo build --manifest-path wasm-core/Cargo.toml --target wasm32-unknown-unknown --release
+  wasm-pack build wasm-core --target web --out-dir pkg --release
 
-The environment used to prepare this commit did not have Rust/Cargo installed, so these tests/build commands have not yet been run. The next substantial port must bring over the CPU, memory bus, loader/decryption, and required peripherals as a coherent system. Firmware dumps and device keys must remain user-local.
+CI builds the native tests and WebAssembly package. The browser-facing crate is still a collection of hardware boundaries, not a substitute for the actual CPU. Firmware dumps and device keys must remain user-local.
