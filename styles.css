@@ -221,3 +221,6 @@
 .emulator-external-link{display:flex;align-items:center;justify-content:center;text-align:center;text-decoration:none;margin:12px 14px 0;width:calc(100% - 28px)}
 .preview-settings>.notice{margin:14px}
 .preview-settings>.notice b{color:var(--mint)}
+
+/* Emulator controls: keep the batch selector consistent with the studio inputs. */
+.run-count-control{display:flex;align-items:center;gap:7px;padding:0 4px;color:var(--muted);font-size:10px;white-space:nowrap}.run-count-control select{min-width:100px;background:#121221;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:9px;font:11px 'DM Mono',monospace}.run-count-control select:focus-visible{outline:2px solid var(--purple);outline-offset:2px}
