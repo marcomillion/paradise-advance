@@ -116,7 +116,7 @@
   try {
     const savedKey = localStorage.getItem(savedKeyStorageName);
     if (savedKey && /^0x[0-9a-fA-F]{8}$/.test(savedKey)) {
-      $('deviceKeyInput').value = savedKey.toUpperCase();
+      $('deviceKeyInput').value = savedKey.slice(0, 2).toLowerCase() + savedKey.slice(2).toUpperCase();
       $('rememberDeviceKey').checked = true;
     }
   } catch (_) {}
