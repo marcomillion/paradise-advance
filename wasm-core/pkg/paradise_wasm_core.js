@@ -408,6 +408,25 @@ export function decrypt_firmware_with_key(bytes, device_key) {
     wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     return v3;
 }
+
+/**
+ * Search a bounded block of the 32-bit device-key space. Keep chunks small in browsers.
+ * @param {Uint8Array | number[]} bytes
+ * @param {number} start
+ * @param {number} count
+ * @returns {number | undefined}
+ */
+export function search_device_key_candidates(bytes, start, count) {
+    const val2 = +start;
+    const val3 = +count;
+    const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.search_device_key_candidates(ptr0, len0, val2, val3);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return ret[0] === Number.MAX_SAFE_INTEGER ? undefined : ret[0];
+}
 function __wbg_get_imports() {
     const import0 = {
         __proto__: null,

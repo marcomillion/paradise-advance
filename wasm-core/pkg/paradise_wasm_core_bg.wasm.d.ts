@@ -45,6 +45,7 @@ export const browsermemory_reset_vector_pc: (a: number) => number;
 export const browsermemory_reset_vector_sp: (a: number) => number;
 export const browsermemory_write_u8: (a: number, b: number, c: number) => number;
 export const decrypt_firmware_with_key: (a: number, b: number, c: number) => [number, number, number, number];
+export const search_device_key_candidates: (a: number, b: number, c: number, d: number) => [number, number, number];
 export const __wbindgen_externrefs: WebAssembly.Table;
 export const __wbindgen_free: (a: number, b: number, c: number) => void;
 export const __wbindgen_malloc: (a: number, b: number) => number;

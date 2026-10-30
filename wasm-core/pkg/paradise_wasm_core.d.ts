@@ -81,6 +81,11 @@ export class BrowserMemory {
  */
 export function decrypt_firmware_with_key(bytes: Uint8Array | number[], device_key: number): Uint8Array;
 
+/**
+ * Search a bounded block of the 32-bit device-key space. Keep chunks small in browsers.
+ */
+export function search_device_key_candidates(bytes: Uint8Array | number[], start: number, count: number): number | undefined;
+
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
@@ -129,6 +134,7 @@ export interface InitOutput {
     readonly browsermemory_reset_vector_sp: (a: number) => number;
     readonly browsermemory_write_u8: (a: number, b: number, c: number) => number;
     readonly decrypt_firmware_with_key: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly search_device_key_candidates: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly __wbindgen_externrefs: WebAssembly.Table;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
