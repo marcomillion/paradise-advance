@@ -97,6 +97,26 @@ impl BrowserCpu {
     pub fn load_flash(&mut self, bytes:&[u8]) -> Result<(),JsValue> {
         self.memory.load_flash(bytes).map_err(JsValue::from_str)
     }
+    /// Load a Sonix image using the caller-supplied device key, then prepare its user-code
+    /// vector table in PRAM. This does not yet emulate the full boot ROM or MMIO devices.
+    pub fn load_sonix_firmware(&mut self, bytes:&[u8], device_key:u32) -> Result<(),JsValue> {
+        if bytes.len()!=16*1024*1024 { return Err(JsValue::from_str("Expected a 16 MiB flash dump.")); }
+        let decrypted=decrypt_dump_with_key(bytes,device_key).map_err(JsValue::from_str)?;
+        let table=find_tables(&decrypted).into_iter().next()
+            .ok_or_else(||JsValue::from_str("No valid Sonix load table found"))?;
+        self.memory.load_flash(&decrypted).map_err(JsValue::from_str)?;
+        let off=(table.user_code.address & 0x00FF_FFFF) as usize;
+        let end=off.checked_add(table.user_code.length as usize)
+            .ok_or_else(||JsValue::from_str("Firmware region address overflow"))?;
+        let region=decrypted.get(off..end)
+            .ok_or_else(||JsValue::from_str("Declared user-code region is outside the dump"))?;
+        self.memory.load_pram(region);
+        self.cpu.reset_from_vectors(&self.memory,0);
+        if self.cpu.r[15]&1==0 {
+            return Err(JsValue::from_str("User-code reset vector is not Thumb; device key may be incorrect."));
+        }
+        Ok(())
+    }
     pub fn reset_from_vectors(&mut self, vector_base:u32) {
         self.cpu.reset_from_vectors(&self.memory,vector_base);
     }
