@@ -181,6 +181,23 @@ mod browser_integration_tests {
     }
 
     #[test]
+    fn dma_panel_transfer_reaches_browser_framebuffer() {
+        let mut cpu=BrowserCpu::new();
+        cpu.memory.sram[0x100..0x104].copy_from_slice(&[0xE0,0x07,0x1F,0x00]);
+        fn wr32(m:&mut MemoryStorage,a:u32,v:u32){for i in 0..4 {m.write_u8(a+i,(v>>(8*i)) as u8);}}
+        wr32(&mut cpu.memory,0x4000_F108,crate::memory::SRAM_BASE+0x100);
+        wr32(&mut cpu.memory,0x4000_F10C,0x4000_E01C);
+        wr32(&mut cpu.memory,0x4000_F114,2);
+        wr32(&mut cpu.memory,0x4000_F100,1);
+        cpu.memory.pram[0..2].copy_from_slice(&0xBF00u16.to_le_bytes());
+        cpu.cpu.r[15]=0;
+        cpu.step().unwrap();
+        let frame=cpu.display_rgba_framebuffer();
+        assert_eq!(&frame[0..4],&[0,255,0,255]);
+        assert_eq!(&frame[4..8],&[0,0,255,255]);
+    }
+
+    #[test]
     fn framebuffer_dimensions_are_exposed_through_cpu() {
         let cpu = BrowserCpu::new();
         assert_eq!(cpu.display_width(), 128);
