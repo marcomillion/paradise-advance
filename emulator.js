@@ -159,13 +159,36 @@
       $('emulatorStepBtn').disabled = true; $('emulatorRunBtn').disabled = true;
     }
   });
-  document.querySelectorAll('[data-device-button]').forEach(button => {
-    button.addEventListener('click', () => {
-      if (inputStatus) inputStatus.textContent = 'Physical-button mapping is not connected to the emulated GPIO yet.';
-    });
+  document.querySelectorAll('[data-device-button]').forEach((button, index) => {
+    const send = pressed => {
+      if (!cpuLoaded) {
+        if (inputStatus) inputStatus.textContent = 'Load firmware before sending emulated button input.';
+        return;
+      }
+      request('input', { button: index, pressed }).catch(error => {
+        if (inputStatus) inputStatus.textContent = 'Input error: ' + (error.message || String(error));
+      });
+    };
+    button.addEventListener('pointerdown', event => { event.preventDefault(); send(true); });
+    button.addEventListener('pointerup', () => send(false));
+    button.addEventListener('pointerleave', () => send(false));
+    button.addEventListener('pointercancel', () => send(false));
   });
-  $('zoomDial')?.addEventListener('click', () => {
-    if (inputStatus) inputStatus.textContent = 'Zoom-dial GPIO/encoder mapping is not connected yet.';
+  const dial = $('zoomDial');
+  dial?.addEventListener('wheel', event => {
+    event.preventDefault();
+    if (!cpuLoaded) {
+      if (inputStatus) inputStatus.textContent = 'Load firmware before rotating the emulated dial.';
+      return;
+    }
+    request('input', { dialDelta: event.deltaY < 0 ? 1 : -1 }).catch(error => {
+      if (inputStatus) inputStatus.textContent = 'Dial input error: ' + (error.message || String(error));
+    });
+  }, { passive: false });
+  dial?.addEventListener('click', () => {
+    if (inputStatus) inputStatus.textContent = cpuLoaded
+      ? 'Dial rotation is connected to the initial GPIO model; dial-press hardware is not mapped yet.'
+      : 'Load firmware before sending emulated input.';
   });
   startWorker().then(() => {
     setStatus('WASM core ready · awaiting firmware', 'The browser package loaded successfully. Choose a local 16 MiB dump to inspect it. Firmware execution is experimental; no simulated pet is shown.');
