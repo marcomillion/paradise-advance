@@ -36,6 +36,7 @@ pub struct MemoryStorage {
     pub gpio_port_data: [u32; 3], pub gpio_port_direction: [u32; 3], pub gpio_port_mode: [u32; 3],
     pub gpio_port_irq_enable: [u32; 3], pub gpio_port_irq_status: [u32; 3],
     gpio_port_cycles: u64, gpio_te_high: bool,
+    pub spi_registers: [u32; 8], pub spi_last_tx: u16, pub spi_tx_words: u64,
     pub dma_registers: [u32; 78], pub panel_frame: Option<Vec<u16>>, pub dma_irq_pending: bool,
     pub nvic_iser: [u32; 2],
     pub systick_ctrl: u32, pub systick_reload: u32, pub systick_current: u32, pub systick_pending: bool,
@@ -51,6 +52,7 @@ impl MemoryStorage {
             gpio_buttons:[false;4], dial_counter:0,
             gpio_port_data:[0;3], gpio_port_direction:[0;3], gpio_port_mode:[0;3],
             gpio_port_irq_enable:[0;3], gpio_port_irq_status:[0;3], gpio_port_cycles:0, gpio_te_high:true,
+            spi_registers:[0,2,5,0,0,0,0,0], spi_last_tx:0, spi_tx_words:0,
             dma_registers:[0;78], panel_frame:None, dma_irq_pending:false, nvic_iser:[0;2],
             systick_ctrl:0, systick_reload:0, systick_current:0, systick_pending:false }
     }
@@ -96,6 +98,27 @@ impl MemoryStorage {
     }
     pub fn gpio_te_irq_enabled(&self)->bool {
         self.nvic_iser[0]&(1<<27)!=0
+    }
+    fn spi_read_reg(&self,offset:u32)->u32 {
+        match offset {
+            0x00=>self.spi_registers[0],
+            0x04=>self.spi_registers[1],
+            0x08=>0x05, // TXEMPTY and RXEMPTY; transfers complete immediately in this slice
+            0x10=>self.spi_registers[4],
+            0x14=>self.spi_registers[5],
+            0x1C=>0, // no SPI peripheral is connected to the RX FIFO in the minimal model
+            _=>0,
+        }
+    }
+    fn spi_write_reg(&mut self,offset:u32,value:u32) {
+        match offset {
+            0x00=>self.spi_registers[0]=value,
+            0x04=>self.spi_registers[1]=value,
+            0x10=>self.spi_registers[4]=value,
+            0x18=>self.spi_registers[5]&=!value,
+            0x1C=>{self.spi_last_tx=value as u16;self.spi_tx_words=self.spi_tx_words.wrapping_add(1);self.spi_registers[7]=value&0xFFFF;},
+            _=>{},
+        }
     }
     fn gpio_port_index(address: u32) -> Option<(usize,u32)> {
         let base=match address {
@@ -158,6 +181,10 @@ impl MemoryStorage {
         }
     }
     pub fn read_u8(&self, address: u32) -> u8 {
+        if (0x4000_E000..=0x4000_E01F).contains(&address) {
+            let reg=self.spi_read_reg((address-0x4000_E000)&!3);
+            return ((reg>>((address&3)*8))&0xFF) as u8;
+        }
         if (0x4200_0000..=0x43FF_FFFF).contains(&address) {
             let word=self.read_u32(address & !3);
             return ((word >> ((address&3)*8)) & 0xFF) as u8;
@@ -213,6 +240,7 @@ impl MemoryStorage {
         value
     }
     pub fn read_u32(&self, address: u32) -> u32 {
+        if (0x4000_E000..=0x4000_E01F).contains(&address) { return self.spi_read_reg((address-0x4000_E000)&!3); }
         if (0x4200_0000..=0x43FF_FFFF).contains(&address) {
             if let Some((target,bit))=Self::bitband_target(address) { return ((self.read_u8(target)>>bit)&1) as u32; }
         }
@@ -220,6 +248,10 @@ impl MemoryStorage {
             self.read_u8(address.wrapping_add(2)),self.read_u8(address.wrapping_add(3))])
     }
     pub fn write_u32(&mut self,address:u32,value:u32)->bool {
+        if (0x4000_E000..=0x4000_E01F).contains(&address) {
+            if address&3!=0 { return false; }
+            self.spi_write_reg(address-0x4000_E000,value); return true;
+        }
         if let Some((target,bit))=Self::bitband_target(address) {
             if address&3!=0 { return false; }
             let old=self.read_u8(target);
@@ -231,6 +263,12 @@ impl MemoryStorage {
         accepted
     }
     pub fn write_u8(&mut self, address: u32, value: u8) -> bool {
+        if (0x4000_E000..=0x4000_E01F).contains(&address) {
+            let shift=(address&3)*8;let offset=(address-0x4000_E000)&!3;
+            if offset==0x18 { self.spi_write_reg(offset,(value as u32)<<shift); }
+            else { let current=self.spi_read_reg(offset);let mask=!(0xFFu32<<shift);self.spi_write_reg(offset,(current&mask)|((value as u32)<<shift)); }
+            return true;
+        }
         if (0x4200_0000..=0x43FF_FFFF).contains(&address) {
             if address&3!=0 { return true; }
             if let Some((target,bit))=Self::bitband_target(address) {
@@ -383,6 +421,23 @@ mod tests {
         assert_eq!(m.read_u32(0x4001_8000)&(1<<10),0);
         m.rotate_dial(1);
         assert_eq!(m.read_u32(0x4001_A000)&3,1);
+    }
+    #[test]
+    fn spi0_control_status_and_data_registers_are_mapped() {
+        let mut m=MemoryStorage::new();
+        assert_eq!(m.read_u32(0x4000_E008),0x05); // TXEMPTY | RXEMPTY
+        assert!(m.write_u32(0x4000_E000,0x103));
+        assert_eq!(m.read_u32(0x4000_E000),0x103);
+        assert!(m.write_u32(0x4000_E004,4));
+        assert_eq!(m.read_u32(0x4000_E004),4);
+        assert!(m.write_u32(0x4000_E010,0x20));
+        assert_eq!(m.read_u32(0x4000_E010),0x20);
+        m.spi_registers[5]=0x30;
+        assert!(m.write_u32(0x4000_E018,0x10));
+        assert_eq!(m.read_u32(0x4000_E014),0x20); // W1C interrupt acknowledgement
+        assert!(m.write_u32(0x4000_E01C,0xA55A));
+        assert_eq!(m.spi_last_tx,0xA55A);
+        assert_eq!(m.spi_tx_words,1);
     }
     #[test]
     fn lcd_te_signal_toggles_and_latches_enabled_rising_edge() {
