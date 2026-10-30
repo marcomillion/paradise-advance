@@ -210,6 +210,24 @@ impl ThumbCpu {
             }
             self.instructions=self.instructions.wrapping_add(1);return Ok(());
         }
+        // SXTH/UXTH/SXTB/UXTB and their add-accumulate variants.
+        // These are common compiler output and must not be mistaken for unknown opcodes.
+        if (op1&0xFF80)==0xFA00 && (op2&0xF080)==0xF080 {
+            let rn=(op1&0xF) as usize;
+            let rm=(op2&0xF) as usize;
+            let rd=((op2>>8)&0xF) as usize;
+            let rotation=((op2>>4)&3)*8;
+            let rotated=self.r[rm].rotate_right(rotation as u32);
+            let extended=match op1&0x00F0 {
+                0x0000=>rotated as u16 as i16 as i32 as u32, // SXTH
+                0x0010=>rotated as u16 as u32,               // UXTH
+                0x0040=>rotated as u8 as i8 as i32 as u32,   // SXTB
+                0x0050=>rotated as u8 as u32,                // UXTB
+                _=>{let f=CpuFault::UnsupportedInstruction(op1);self.halted=true;self.last_fault=Some(f);return Err(f);}
+            };
+            self.r[rd]=if rn==15 {extended}else{self.r[rn].wrapping_add(extended)};
+            self.instructions=self.instructions.wrapping_add(1);return Ok(());
+        }
         // CLZ (count leading zero bits).
         if (op1&0xFFF0)==0xFAB0 && (op2&0xF0F0)==0xF080 {
             let rn=(op1&0xF) as usize;let rd=((op2>>8)&0xF) as usize;
@@ -666,6 +684,24 @@ mod tests {
         assert_eq!(c.exclusive_address,None); assert!(!c.in_irq);
     }
 
+    #[test]
+    fn thumb2_signed_and_unsigned_extend_instructions_work() {
+        let cases=[
+            (0xFA4Fu16,0xF081u16,0x1234_5680u32,0xFFFF_FF80u32), // SXTB r0, r1
+            (0xFA5Fu16,0xF081u16,0x1234_5680u32,0x0000_0080u32), // UXTB r0, r1
+            (0xFA0Fu16,0xF081u16,0x1234_8001u32,0xFFFF_8001u32), // SXTH r0, r1
+            (0xFA1Fu16,0xF081u16,0x1234_8001u32,0x0000_8001u32), // UXTH r0, r1
+        ];
+        for (first,second,input,expected) in cases {
+            let mut m=MemoryStorage::new();
+            m.pram[0..2].copy_from_slice(&first.to_le_bytes());
+            m.pram[2..4].copy_from_slice(&second.to_le_bytes());
+            let mut c=ThumbCpu::new();c.r[1]=input;c.r[15]=0;
+            assert!(c.step(&mut m).is_ok(),"opcode {first:04X} {second:04X}");
+            assert_eq!(c.r[0],expected,"opcode {first:04X} {second:04X}");
+            assert_eq!(c.r[15],4);
+        }
+    }
     #[test]
     fn enabled_lcd_te_irq_enters_gpio_port_handler() {
         let mut m=MemoryStorage::new();
