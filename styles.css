@@ -16,3 +16,20 @@
 .sprite-frame-row{display:flex;align-items:center;justify-content:center;gap:5px;color:var(--muted);font-size:12px}
 .sprite-frame-row input{width:62px;padding:5px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text);font:inherit}
 #spritePackageMore{margin-top:14px}
+
+/* Animation timeline */
+.animation-panel{margin-top:22px}
+.animation-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:14px 0}
+.fps-control{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:12px}
+.fps-control input{width:95px}
+.animation-frame-strip{display:flex;gap:10px;overflow-x:auto;padding:8px 2px 14px;min-height:130px}
+.animation-frame{flex:0 0 112px;display:flex;flex-direction:column;align-items:center;gap:6px;padding:9px;border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--text);font:inherit;cursor:pointer}
+.animation-frame.selected{border-color:var(--purple);box-shadow:0 0 0 1px var(--purple)}
+.animation-thumb{width:88px;height:70px;display:grid;place-items:center;background-color:#f5f4fa;background-image:linear-gradient(45deg,#dedde8 25%,transparent 25%),linear-gradient(-45deg,#dedde8 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#dedde8 75%),linear-gradient(-45deg,transparent 75%,#dedde8 75%);background-size:12px 12px;background-position:0 0,0 6px,6px -6px,-6px 0}
+.animation-thumb canvas{max-width:88px;max-height:70px;object-fit:contain;image-rendering:pixelated;width:auto;height:auto}
+.animation-frame b{font-size:11px}
+.animation-frame small{color:var(--muted);font-size:10px}
+.animation-preview-row{display:flex;align-items:center;gap:14px;margin-top:12px}
+.animation-preview-shell{width:192px;height:160px;display:grid;place-items:center;border:8px solid #2a2940;border-radius:18px;background:#f8f7ff;overflow:hidden}
+#animationPreviewCanvas{max-width:100%;max-height:100%;width:auto;height:auto;image-rendering:pixelated}
+@media(max-width:650px){.animation-toolbar .button{flex:1 1 40%}.animation-preview-row{align-items:flex-start;flex-direction:column}}
