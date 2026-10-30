@@ -1,11 +1,10 @@
 // Browser worker adapter for the generated wasm-pack package.
 // Copy the CI artifact's pkg/ directory beside this file before enabling it in the site.
 // No firmware bytes or device keys are logged or sent over the network.
-import init, { BrowserCpu, BrowserFirmwareInfo, BrowserDisplay } from "./pkg/paradise_wasm_core.js";
+import init, { BrowserCpu, BrowserFirmwareInfo } from "./pkg/paradise_wasm_core.js";
 
 let ready = false;
 let cpu = null;
-let display = null;
 
 function postError(id, error) {
   self.postMessage({ id, ok: false, error: error instanceof Error ? error.message : String(error) });
@@ -31,8 +30,7 @@ self.onmessage = async (event) => {
     }
     if (type === "create-cpu") {
       cpu = new BrowserCpu();
-      display = new BrowserDisplay();
-      self.postMessage({ id, ok: true, result: { created: true, displayWidth: display.width(), displayHeight: display.height() }});
+      self.postMessage({ id, ok: true, result: { created: true, displayWidth: cpu.display_width(), displayHeight: cpu.display_height() }});
       return;
     }
     if (type === "load-firmware") {
@@ -63,7 +61,8 @@ self.onmessage = async (event) => {
     }
     if (type === "frame") {
       if (!display) throw new Error("Display has not been created.");
-      self.postMessage({ id, ok: true, result: { width: display.width(), height: display.height(), rgba: display.rgba_framebuffer() }});
+      if (!cpu) throw new Error("CPU has not been created.");
+      self.postMessage({ id, ok: true, result: { width: cpu.display_width(), height: cpu.display_height(), enabled: cpu.display_enabled(), rgba: cpu.display_rgba_framebuffer() }});
       return;
     }
     throw new Error("Unknown worker message type: " + String(type));
