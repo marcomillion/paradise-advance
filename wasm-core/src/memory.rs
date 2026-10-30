@@ -32,6 +32,7 @@ pub fn region_for(address: u32) -> RegionKind {
 pub struct MemoryStorage {
     pub pram: Vec<u8>, pub boot_rom: Vec<u8>, pub sram: Vec<u8>,
     pub mailbox: Vec<u8>, pub flash: Vec<u8>,
+    pub gpio_buttons: [bool; 3], pub dial_counter: i32,
 }
 impl MemoryStorage {
     pub fn new() -> Self {
@@ -40,7 +41,8 @@ impl MemoryStorage {
         boot_rom[4..8].copy_from_slice(&0x0800_0041u32.to_le_bytes());
         boot_rom[0x40..0x46].copy_from_slice(&[0x00,0xBF,0x01,0x20,0xFE,0xE7]);
         Self { pram:vec![0;PRAM_SIZE], boot_rom, sram:vec![0;SRAM_SIZE],
-            mailbox:vec![0;MAILBOX_SIZE], flash:vec![0xFF;FLASH_SIZE] }
+            mailbox:vec![0;MAILBOX_SIZE], flash:vec![0xFF;FLASH_SIZE],
+            gpio_buttons:[false;3], dial_counter:0 }
     }
     pub fn load_pram(&mut self, bytes: &[u8]) {
         self.pram.fill(0);
@@ -51,7 +53,23 @@ impl MemoryStorage {
         if bytes.len() != FLASH_SIZE { return Err("flash dump must be exactly 16 MiB"); }
         self.flash.copy_from_slice(bytes); Ok(())
     }
+    pub fn set_button(&mut self, index: usize, pressed: bool) -> bool {
+        if index >= self.gpio_buttons.len() { return false; }
+        self.gpio_buttons[index] = pressed; true
+    }
+    pub fn rotate_dial(&mut self, delta: i32) { self.dial_counter = self.dial_counter.wrapping_add(delta); }
+    fn gpio_register(&self, offset: u32) -> u32 {
+        match offset {
+            0 => { let mut v=u32::MAX; for (i,pressed) in self.gpio_buttons.iter().enumerate() { if *pressed { v &= !(1<<i); } } v },
+            4 => self.dial_counter as u32,
+            _ => 0,
+        }
+    }
     pub fn read_u8(&self, address: u32) -> u8 {
+        if (0x4003_1000..0x4003_1008).contains(&address) {
+            let reg=self.gpio_register((address-0x4003_1000)&!3);
+            return ((reg >> ((address&3)*8)) & 0xff) as u8;
+        }
         let (slice, offset) = match region_for(address) {
             RegionKind::Pram => (&self.pram[..], (address-PRAM_BASE) as usize),
             RegionKind::BootRom => (&self.boot_rom[..], (address-ROM_BASE) as usize),
@@ -68,6 +86,13 @@ impl MemoryStorage {
             self.read_u8(address.wrapping_add(2)),self.read_u8(address.wrapping_add(3))])
     }
     pub fn write_u8(&mut self, address: u32, value: u8) -> bool {
+        if (0x4003_1004..0x4003_1008).contains(&address) {
+            let shift=((address-0x4003_1004)*8) as u32;
+            let mask=!(0xffu32<<shift);
+            let current=self.dial_counter as u32;
+            self.dial_counter=((current&mask)|((value as u32)<<shift)) as i32;
+            return true;
+        }
         let (slice, offset) = match region_for(address) {
             RegionKind::Pram => (&mut self.pram[..], (address-PRAM_BASE) as usize),
             RegionKind::Sram => (&mut self.sram[..], (address-SRAM_BASE) as usize),
@@ -91,6 +116,15 @@ mod tests {
         assert_eq!(region_for(XIP_BASE),RegionKind::Xip);
         assert_eq!(region_for(FLASH_BASE),RegionKind::Flash);
         assert_eq!(region_for(0x4000_0000),RegionKind::Unmapped);
+    }
+    #[test]
+    fn gpio_buttons_are_active_low_and_dial_is_readable() {
+        let mut m=MemoryStorage::new();
+        assert_eq!(m.read_u32(0x4003_1000)&7,7);
+        assert!(m.set_button(1,true));
+        assert_eq!(m.read_u32(0x4003_1000)&7,5);
+        m.rotate_dial(3);
+        assert_eq!(m.read_u32(0x4003_1004),3);
     }
     #[test] fn reset_vector_boot_rom_is_little_endian() {
         let m=MemoryStorage::new();
