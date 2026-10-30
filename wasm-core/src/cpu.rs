@@ -25,8 +25,8 @@ fn shift_c(value:u32,amount:u32,kind:u32,carry_in:bool)->(u32,bool) {
     match kind {
         0=>if amount==0 {(value,carry_in)} else if amount<32 {(value<<amount,(value>>(32-amount))&1!=0)} else if amount==32 {(0,value&1!=0)} else {(0,false)},
         1=>{let n=if amount==0 {32}else{amount};if n<32 {(value>>n,(value>>(n-1))&1!=0)} else if n==32 {(0,value>>31!=0)} else {(0,false)}},
-        2=>{let n=if amount==0 {32}else{amount};if n<32 {(((value as i32)>>n) as u32,(value>>(n-1))&1!=0)} else { (if value as i32<0 {u32::MAX}else{0},value>>31!=0) }},
-        _=>if amount==0 {(value,carry_in)} else {let n=amount%32;if n==0 {(value,value>>31!=0)} else {let result=value.rotate_right(n);(result,result>>31!=0)}},
+        2=>{let n=if amount==0 {32}else{amount};if n<32 {(((value as i32)>>n) as u32,(value>>(n-1))&1!=0)} else { (if (value as i32)<0 {u32::MAX}else{0},value>>31!=0) }},
+        _=>if amount==0 {((carry_in as u32)<<31|(value>>1),value&1!=0)} else {let n=amount%32;if n==0 {(value,value>>31!=0)} else {let result=value.rotate_right(n);(result,result>>31!=0)}},
     }
 }
 
@@ -660,7 +660,7 @@ mod tests {
         let mut m=MemoryStorage::new();
         // MOV.W r0, #0xFF; ORR.W r2, r0, r1
         m.write_u8(0,0x4F);m.write_u8(1,0xF0);m.write_u8(2,0xFF);m.write_u8(3,0x00);
-        m.write_u8(4,0x40);m.write_u8(5,0xEA);m.write_u8(6,0x02);m.write_u8(7,0x02);
+        m.write_u8(4,0x40);m.write_u8(5,0xEA);m.write_u8(6,0x01);m.write_u8(7,0x02);
         let mut c=ThumbCpu::new();c.r[15]=0;c.r[1]=0x100;
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[0],0xFF);
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[2],0x1FF);
