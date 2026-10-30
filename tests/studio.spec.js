@@ -170,3 +170,37 @@ test('emulator status reports the browser core instead of showing a fake pet', a
   await expect(page.locator('#emulatorRunCount')).toBeVisible();
   await expect(page.locator('#emulatorStepBtn')).toBeDisabled();
 });
+
+test('device key is remembered only after explicit opt-in', async ({ page }) => {
+  await page.locator('[data-view="emulator"]').click();
+  const keyInput = page.locator('#deviceKeyInput');
+  const remember = page.locator('#rememberDeviceKey');
+
+  await expect(remember).not.toBeChecked();
+  await keyInput.fill('0x1234ABCD');
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('paradise-mod-studio-device-key-v1'))).toBeNull();
+
+  await remember.check();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('paradise-mod-studio-device-key-v1'))).toBe('0x1234ABCD');
+
+  await page.reload();
+  await page.locator('[data-view="emulator"]').click();
+  await expect(page.locator('#deviceKeyInput')).toHaveValue('0x1234ABCD');
+  await expect(page.locator('#rememberDeviceKey')).toBeChecked();
+});
+
+test('unchecking device-key persistence clears the saved key', async ({ page }) => {
+  await page.locator('[data-view="emulator"]').click();
+  await page.locator('#rememberDeviceKey').check();
+  await page.locator('#deviceKeyInput').fill('ABCDEF12');
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('paradise-mod-studio-device-key-v1'))).toBe('0xABCDEF12');
+
+  await page.locator('#rememberDeviceKey').uncheck();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('paradise-mod-studio-device-key-v1'))).toBeNull();
+
+  await page.reload();
+  await page.locator('[data-view="emulator"]').click();
+  await expect(page.locator('#rememberDeviceKey')).not.toBeChecked();
+  await expect(page.locator('#deviceKeyInput')).toHaveValue('');
+});
+
