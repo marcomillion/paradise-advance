@@ -99,6 +99,11 @@ impl MemoryStorage {
             let shift=(offset&3)*8;
             let mask=!(0xffu32<<shift);
             self.dma_registers[word]=(self.dma_registers[word]&mask)|((value as u32)<<shift);
+            if offset==0x0B {
+                let ack=self.dma_registers[2];
+                self.dma_registers[0]&=!ack;
+                self.dma_registers[2]=0;
+            }
             // Channel CTRL is acted on only after its complete word is written.
             if offset>=0x100 && (offset-0x100)%0x20==0x03 {
                 let channel=((offset-0x100)/0x20) as usize;
