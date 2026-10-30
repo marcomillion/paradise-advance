@@ -392,8 +392,20 @@ impl ThumbCpu {
                 match alu {
                     0=>{let v=a&b;self.r[rd]=v;self.set_nz(v);},
                     1=>{let v=a^b;self.r[rd]=v;self.set_nz(v);},
-                    2=>{let shift=b&0xff;let v=a.wrapping_shl(shift);self.r[rd]=v;self.set_nz(v);if shift!=0 {self.c=(a>>(32-shift))&1!=0;}},
-                    3=>{let shift=b&0xff;let v=if shift>=32 {0}else{a>>shift};self.r[rd]=v;self.set_nz(v);if shift!=0 {self.c=if shift>32 {false}else{(a>>(shift-1))&1!=0};}},
+                    2=>{
+                        let shift=b&0xff;
+                        let (v,carry)=if shift==0 {(a,self.c)}
+                            else if shift<32 {(a<<shift,(a>>(32-shift))&1!=0)}
+                            else if shift==32 {(0,a&1!=0)}
+                            else {(0,false)};
+                        self.r[rd]=v;self.set_nz(v);if shift!=0 {self.c=carry;}
+                    },
+                    3=>{
+                        let shift=b&0xff;
+                        let v=if shift>=32 {0}else{a>>shift};
+                        self.r[rd]=v;self.set_nz(v);
+                        if shift!=0 {self.c=if shift>32 {false}else{(a>>(shift-1))&1!=0};}
+                    },
                     4=>{let shift=b&0xff;let v=if shift>=32 {if (a as i32)<0 {u32::MAX}else{0}}else{((a as i32)>>shift) as u32};self.r[rd]=v;self.set_nz(v);},
                     5=>{let sum=a as u64+b as u64+self.c as u64;let v=sum as u32;self.r[rd]=v;self.set_nz(v);self.c=sum>u32::MAX as u64;self.v=(!(a^b)&(a^v)&0x8000_0000)!=0;},
                     6=>{let borrow=(!self.c) as u32;let v=a.wrapping_sub(b).wrapping_sub(borrow);self.r[rd]=v;self.set_nz(v);self.c=(a as u64)>=(b as u64+borrow as u64);self.v=((a^b)&(a^v)&0x8000_0000)!=0;},
@@ -404,6 +416,12 @@ impl ThumbCpu {
                     12=>{let v=a|b;self.r[rd]=v;self.set_nz(v);},
                     13=>{let v=a.wrapping_mul(b);self.r[rd]=v;self.set_nz(v);},
                     14=>{let v=a&!b;self.r[rd]=v;self.set_nz(v);},
+                    7=>{
+                        let shift=b&0xff;
+                        let v=if shift==0 {a}else{a.rotate_right(shift)};
+                        self.r[rd]=v;self.set_nz(v);
+                        if shift!=0 {self.c=v>>31!=0;}
+                    },
                     15=>{let v=!b;self.r[rd]=v;self.set_nz(v);},
                     _=>{}
                 }
@@ -600,6 +618,37 @@ mod tests {
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[15],4);
     }
+    #[test]
+    fn register_lsl_handles_shift_counts_at_and_above_word_size() {
+        let mut m=MemoryStorage::new();
+        // LSLS r0, r1: register-controlled shift.
+        m.pram[0..2].copy_from_slice(&0x4088u16.to_le_bytes());
+        let mut c=ThumbCpu::new(); c.r[15]=0; c.r[1]=0x8000_0001; c.r[2]=32;
+        // r1 is the shift count register for this encoding; set it per case below.
+        c.r[1]=32;
+        c.r[0]=0x8000_0001;
+        // Use r0 as the destination and r1 as source/count per encoding semantics:
+        // the encoded instruction reads r0 and shifts it by r1.
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[0],0);
+        assert!(c.c); // shift by 32 carries original bit 0.
+        c.r[15]=0; c.r[1]=33; c.r[0]=0x8000_0001; c.halted=false; c.last_fault=None;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[0],0);
+        assert!(!c.c); // counts greater than 32 clear carry.
+    }
+
+    #[test]
+    fn register_ror_is_implemented_and_sets_carry_from_result() {
+        let mut m=MemoryStorage::new();
+        // RORS r0, r1
+        m.pram[0..2].copy_from_slice(&0x41C8u16.to_le_bytes());
+        let mut c=ThumbCpu::new(); c.r[15]=0; c.r[0]=0x8000_0001; c.r[1]=1;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[0],0xC000_0000);
+        assert!(c.n); assert!(!c.z); assert!(c.c);
+    }
+
     #[test]
     fn executes_asr_immediate_with_sign_extension() {
         let mut m=MemoryStorage::new();
