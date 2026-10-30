@@ -55,7 +55,7 @@ impl ThumbCpu {
         }
         // Common Thumb-2 immediate memory transfers: LDR/STR word, halfword and byte.
         let transfer = op1 & 0xFFF0;
-        if matches!(transfer, 0xF8D0 | 0xF8C0 | 0xF890 | 0xF880 | 0xF8B0 | 0xF8A0) {
+        if matches!(transfer, 0xF8D0 | 0xF8C0 | 0xF890 | 0xF880 | 0xF8B0 | 0xF8A0 | 0xF990 | 0xF9B0) {
             let rn=(op1&15) as usize;
             let rt=((op2>>12)&15) as usize;
             let address=self.r[rn].wrapping_add((op2&0x0fff) as u32);
@@ -66,6 +66,8 @@ impl ThumbCpu {
                 0xF880 => { m.write_u8(address,self.r[rt] as u8); },
                 0xF8B0 => { self.r[rt]=m.read_u8(address) as u32|((m.read_u8(address+1) as u32)<<8); },
                 0xF8A0 => { let value=self.r[rt];m.write_u8(address,value as u8);m.write_u8(address+1,(value>>8) as u8); },
+                0xF990 => { self.r[rt]=m.read_u8(address) as i8 as i32 as u32; },
+                0xF9B0 => { self.r[rt]=(m.read_u8(address) as u32|((m.read_u8(address+1) as u32)<<8)) as u16 as i16 as i32 as u32; },
                 _=>{}
             }
             self.instructions=self.instructions.wrapping_add(1); return Ok(());
@@ -432,6 +434,17 @@ mod tests {
         let mut c=ThumbCpu::new(); c.r[15]=0; c.r[1]=0x1000;
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[0],0x1234); assert_eq!(c.r[15],4);
+    }
+    #[test]
+    fn executes_thumb2_signed_byte_and_halfword_loads() {
+        let mut m=MemoryStorage::new();
+        // LDRSB r0, [r1, #0]; LDRSH r2, [r1, #2]
+        m.write_u8(0,0x91); m.write_u8(1,0xF9); m.write_u8(2,0x00); m.write_u8(3,0x00);
+        m.write_u8(4,0xB1); m.write_u8(5,0xF9); m.write_u8(6,0x02); m.write_u8(7,0x20);
+        m.write_u8(0x100,0x80); m.write_u8(0x102,0x00); m.write_u8(0x103,0x80);
+        let mut c=ThumbCpu::new(); c.r[15]=0; c.r[1]=0x100;
+        assert!(c.step(&mut m).is_ok()); assert_eq!(c.r[0],0xFFFF_FF80);
+        assert!(c.step(&mut m).is_ok()); assert_eq!(c.r[2],0xFFFF_8000);
     }
     #[test]
     fn executes_thumb2_subw_immediate() {
