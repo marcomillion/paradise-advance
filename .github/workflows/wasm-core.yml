@@ -3,7 +3,10 @@ name: WASM core checks
 on:
   push:
     paths:
-      - "wasm-core/**"
+      - "wasm-core/src/**"
+      - "wasm-core/Cargo.toml"
+      - "wasm-core/browser-worker.js"
+      - "wasm-core/README.md"
       - ".github/workflows/wasm-core.yml"
   pull_request:
     paths:
@@ -12,7 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   native-tests:
@@ -42,6 +45,15 @@ jobs:
           tool: wasm-pack
       - name: Package browser module and JavaScript bindings
         run: wasm-pack build wasm-core --target web --out-dir pkg --release
+      - name: Commit generated browser package for GitHub Pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f wasm-core/pkg/
+          if ! git diff --cached --quiet; then
+            git commit -m "Build browser WASM package"
+            git push origin HEAD:main
+          fi
       - name: Upload browser package
         uses: actions/upload-artifact@v4
         with:
