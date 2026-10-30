@@ -5,6 +5,7 @@
   const inputStatus = $('deviceInputStatus');
   const fileInput = $('firmwareInput');
   let worker = null;
+  let initPromise = null;
   let requestId = 0;
   let pending = new Map();
   let firmwareBytes = null;
@@ -21,12 +22,13 @@
     pending.clear();
   }
   function startWorker() {
-    if (worker) return Promise.resolve();
-    return new Promise((resolve, reject) => {
+    if (coreReady) return Promise.resolve();
+    if (initPromise) return initPromise;
+    initPromise = new Promise((resolve, reject) => {
       try {
         worker = new Worker('wasm-core/browser-worker.js', { type: 'module' });
       } catch (error) {
-        reject(error); return;
+        worker = null; initPromise = null; reject(error); return;
       }
       worker.onmessage = event => {
         const data = event.data || {};
@@ -40,12 +42,16 @@
       worker.onerror = event => {
         const message = event.message || 'Could not load the WebAssembly worker package.';
         failAll(message);
-        if (!coreReady) setStatus('Browser core unavailable', 'The WASM package could not be loaded. The build must finish publishing wasm-core/pkg before firmware can execute.');
+        if (!coreReady) {
+          setStatus('Browser core unavailable', 'The WASM package could not be loaded. The build must finish publishing wasm-core/pkg before firmware can execute.');
+          worker?.terminate(); worker = null; initPromise = null;
+        }
       };
       const id = ++requestId;
       pending.set(id, { resolve, reject });
       worker.postMessage({ id, type: 'init' });
-    }).then(() => { coreReady = true; });
+    }).then(() => { coreReady = true; return undefined; }).catch(error => { initPromise = null; throw error; });
+    return initPromise;
   }
   function request(type, payload = {}) {
     return startWorker().then(() => new Promise((resolve, reject) => {
