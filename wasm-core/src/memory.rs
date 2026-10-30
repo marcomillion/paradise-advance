@@ -33,7 +33,7 @@ pub struct MemoryStorage {
     pub pram: Vec<u8>, pub boot_rom: Vec<u8>, pub sram: Vec<u8>,
     pub mailbox: Vec<u8>, pub flash: Vec<u8>,
     pub gpio_buttons: [bool; 3], pub dial_counter: i32,
-    pub dma_registers: [u32; 76], pub panel_frame: Option<Vec<u16>>,
+    pub dma_registers: [u32; 78], pub panel_frame: Option<Vec<u16>>,
 }
 impl MemoryStorage {
     pub fn new() -> Self {
@@ -44,7 +44,7 @@ impl MemoryStorage {
         Self { pram:vec![0;PRAM_SIZE], boot_rom, sram:vec![0;SRAM_SIZE],
             mailbox:vec![0;MAILBOX_SIZE], flash:vec![0xFF;FLASH_SIZE],
             gpio_buttons:[false;3], dial_counter:0,
-            dma_registers:[0;76], panel_frame:None }
+            dma_registers:[0;78], panel_frame:None }
     }
     pub fn load_pram(&mut self, bytes: &[u8]) {
         self.pram.fill(0);
@@ -88,7 +88,7 @@ impl MemoryStorage {
             self.read_u8(address.wrapping_add(2)),self.read_u8(address.wrapping_add(3))])
     }
     pub fn write_u8(&mut self, address: u32, value: u8) -> bool {
-        if (0x4000_F000..0x4000_F130).contains(&address) {
+        if (0x4000_F000..0x4000_F138).contains(&address) {
             let offset=address-0x4000_F000;
             let word=(offset/4) as usize;
             let shift=(offset&3)*8;
