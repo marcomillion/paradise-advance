@@ -106,6 +106,17 @@ mod tests {
         assert_eq!(search_device_key_chunk(&bytes,u32::MAX,2).unwrap(),None);
         assert_eq!(search_device_key_chunk(&bytes,device_key,0).unwrap(),None);
     }
+    #[test]
+    fn key_search_rejects_vector_block_outside_declared_region() {
+        let mut bytes=vec![0xFFu8;16*1024*1024];
+        let mut table=sample();
+        table[0x14..0x18].copy_from_slice(&8u32.to_le_bytes());
+        bytes[..TABLE_STRIDE].copy_from_slice(&table);
+        assert_eq!(
+            search_device_key_chunk(&bytes,0,1),
+            Err("Encrypted vector block is outside the declared region")
+        );
+    }
     #[test] fn parses_v3_encrypted_sonix_table() {
         let t=LoadTable::parse(&sample(),0).unwrap();
         assert_eq!(t.magic,"SONIXDEV"); assert_eq!(t.version,VERSION_V3);
@@ -128,7 +139,13 @@ pub fn search_device_key_chunk(bytes:&[u8], start:u32, count:u32)->Result<Option
     let table=find_tables(bytes).into_iter().find(|t|t.encrypted).ok_or("No encrypted Sonix table found")?;
     let region=if !table.sram_code.is_empty(){table.sram_code}else{table.user_code};
     let off=(region.address&0x00FF_FFFF) as usize;
-    let raw: [u8;16]=bytes.get(off..off.checked_add(16).ok_or("Region offset overflow")?)
+    let region_len=region.length as usize;
+    let region_end=off.checked_add(region_len).ok_or("Region offset overflow")?;
+    if region_len<16 || region_end>bytes.len() {
+        return Err("Encrypted vector block is outside the declared region");
+    }
+    let block_end=off.checked_add(16).ok_or("Region offset overflow")?;
+    let raw: [u8;16]=bytes.get(off..block_end)
         .ok_or("Encrypted vector block is outside the flash dump")?.try_into().map_err(|_|"Invalid vector block")?;
     let mut key=table.aes_key; key.reverse();
     let aes_region=Aes::new(&key);
