@@ -536,6 +536,11 @@ impl ThumbCpu {
                 self.r[rd]=result;
             },
             0xB000..=0xB0FF => { let delta=((op&0x7f) as u32)*4; self.r[13]=if op&0x80!=0 {self.r[13].wrapping_sub(delta)} else {self.r[13].wrapping_add(delta)}; },
+            0xDF00..=0xDFFF => {
+                // SVC stacks the current context and dispatches through vector 11.
+                // This minimal model supports one active exception level.
+                self.enter_exception(m,11);
+            },
             0xD000..=0xDDFF => { let cond=(op>>8)&15; if cond<14 && self.condition(cond) {let off=(((op&0xff) as i8 as i32)<<1) as u32; self.r[15]=next.wrapping_add(2).wrapping_add(off);} },
             0xE000..=0xE7FF => { let off=(((op&0x7ff) as i16)<<5>>4) as u32; self.r[15]=pc.wrapping_add(4).wrapping_add(off); },
             _ => { let f=CpuFault::UnsupportedInstruction(op); self.halted=true; self.last_fault=Some(f); return Err(f); }
@@ -640,6 +645,31 @@ mod tests {
         assert!(!c.halted); assert_eq!(c.last_fault,None); assert_eq!(c.instructions,0);
         assert!(!c.primask); assert_eq!(c.itstate,0); assert_eq!(c.ipsr,0);
         assert_eq!(c.exclusive_address,None); assert!(!c.in_irq);
+    }
+
+    #[test]
+    fn svc_enters_handler_and_stacks_architectural_context() {
+        let mut m=MemoryStorage::new();
+        m.pram[0..2].copy_from_slice(&0xDF01u16.to_le_bytes()); // SVC #1
+        m.pram[0x100..0x102].copy_from_slice(&0xBF00u16.to_le_bytes()); // handler NOP
+        m.write_u32(11*4,0x101);
+        let initial_sp=crate::memory::SRAM_BASE+0x100;
+        let mut c=ThumbCpu::new();
+        c.r[13]=initial_sp;
+        c.r[0]=0x1111_1111; c.r[1]=0x2222_2222; c.r[2]=0x3333_3333; c.r[3]=0x4444_4444;
+        c.r[12]=0xCCCC_CCCC; c.r[14]=0x0000_0081; c.r[15]=0;
+        c.n=true; c.z=false; c.c=true; c.v=false;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[15],0x100);
+        assert_eq!(c.r[14],0xFFFF_FFF9);
+        assert_eq!(c.r[13],initial_sp-32);
+        assert_eq!(m.read_u32(initial_sp-32),0x1111_1111);
+        assert_eq!(m.read_u32(initial_sp-28),0x2222_2222);
+        assert_eq!(m.read_u32(initial_sp-12),0x0000_0081);
+        assert_eq!(m.read_u32(initial_sp-8),2);
+        assert_eq!(m.read_u32(initial_sp-4)&0xF000_0000,0xA000_0000);
+        assert_eq!(c.ipsr,11);
+        assert!(c.in_irq);
     }
 
     #[test]
