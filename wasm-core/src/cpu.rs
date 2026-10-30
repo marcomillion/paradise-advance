@@ -27,6 +27,34 @@ impl ThumbCpu {
         6=>self.v,7=>!self.v,8=>self.c&&!self.z,9=>!self.c||self.z,
         10=>self.n==self.v,11=>self.n!=self.v,12=>!self.z&&(self.n==self.v),
         13=>self.z||(self.n!=self.v),14=>true,_=>false } }
+    fn step_wide(&mut self, m:&mut MemoryStorage, pc:u32, first:u16)->Result<(),CpuFault> {
+        let second=m.read_u8(pc.wrapping_add(2)) as u16 | ((m.read_u8(pc.wrapping_add(3)) as u16)<<8);
+        let op1=first; let op2=second;
+        self.r[15]=pc.wrapping_add(4);
+        if (op1 & 0xFBF0)==0xF240 || (op1 & 0xFBF0)==0xF2C0 {
+            let rd=((op2>>8)&15) as usize;
+            let imm=(((op1&15) as u32)<<12)
+                | (((op1>>10&1) as u32)<<11)
+                | (((op2>>12&7) as u32)<<8)
+                | (op2&0xff) as u32;
+            if (op1&0xFBF0)==0xF240 { self.r[rd]=imm; }
+            else { self.r[rd]=(self.r[rd]&0xffff)|(imm<<16); }
+            self.instructions=self.instructions.wrapping_add(1); return Ok(());
+        }
+        // BL (Thumb-2): reconstruct the signed 25-bit PC-relative displacement.
+        if (op1&0xF800)==0xF000 && (op2&0xD000)==0xD000 {
+            let s=((op1>>10)&1) as u32;
+            let j1=((op2>>13)&1) as u32;
+            let j2=((op2>>11)&1) as u32;
+            let i1=(!(j1^s))&1; let i2=(!(j2^s))&1;
+            let imm25=(s<<24)|(i1<<23)|(i2<<22)|(((op1&0x03ff) as u32)<<12)|(((op2&0x07ff) as u32)<<1);
+            let offset=((imm25 as i32)<<7>>7) as u32;
+            self.r[14]=pc.wrapping_add(4)|1;
+            self.r[15]=pc.wrapping_add(4).wrapping_add(offset)&!1;
+            self.instructions=self.instructions.wrapping_add(1); return Ok(());
+        }
+        let f=CpuFault::UnsupportedInstruction(first); self.halted=true; self.last_fault=Some(f); Err(f)
+    }
     pub fn step(&mut self, m:&mut MemoryStorage)->Result<(),CpuFault> {
         if self.halted { return Err(CpuFault::Halted); }
         let pc=self.r[15];
@@ -34,6 +62,9 @@ impl ThumbCpu {
             self.halted=true; let f=CpuFault::InvalidExecutionAddress(pc); self.last_fault=Some(f); return Err(f);
         }
         let op=m.read_u8(pc) as u16 | ((m.read_u8(pc.wrapping_add(1)) as u16)<<8);
+        if matches!(op & 0xF800, 0xE800 | 0xF000 | 0xF800) {
+            return self.step_wide(m,pc,op);
+        }
         let next=pc.wrapping_add(2); self.r[15]=next;
         let rd=(op&7) as usize; let rn=((op>>3)&7) as usize; let rm=((op>>6)&7) as usize;
         match op {
