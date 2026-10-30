@@ -21,7 +21,7 @@ self.onmessage = async (event) => {
     }
     if (!ready) throw new Error("WASM core is not initialized.");
     if (type === "inspect") {
-      const info = BrowserFirmwareInfo.inspect(new Uint8Array(payload.bytes));
+      const info = new BrowserFirmwareInfo(new Uint8Array(payload.bytes));
       self.postMessage({ id, ok: true, result: {
         magic: info.magic(), version: info.version(), loadConfig: info.load_config(),
         encrypted: info.encrypted(), tableCount: info.table_count(),
@@ -61,9 +61,9 @@ self.onmessage = async (event) => {
       self.postMessage({ id, ok: true, result: { value: cpu.register(Number(payload.index)) }});
       return;
     }
-    if (type === "display-clear") {
+    if (type === "frame") {
       if (!display) throw new Error("Display has not been created.");
-      self.postMessage({ id, ok: true, result: { cleared: true }});
+      self.postMessage({ id, ok: true, result: { width: display.width(), height: display.height(), rgba: display.rgba_framebuffer() }});
       return;
     }
     throw new Error("Unknown worker message type: " + String(type));
