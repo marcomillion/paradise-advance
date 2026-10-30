@@ -190,6 +190,31 @@ impl ThumbCpu {
             },
             0x9000..=0x9FFF => { let d=((op>>8)&7) as usize; let addr=self.r[13].wrapping_add(((op&0xff) as u32)*4); if op&0x0800!=0 {self.r[d]=m.read_u32(addr);} else {let v=self.r[d];for i in 0..4 {m.write_u8(addr+i,(v>>(i*8)) as u8);}} },
             0xA000..=0xAFFF => { let d=((op>>8)&7) as usize; self.r[d]=((pc.wrapping_add(4))&!3).wrapping_add(((op&0xff) as u32)*4); },
+            0xB200..=0xB2FF => {
+                let kind=op&0xFFC0;
+                let source=((op>>3)&7) as usize;
+                let value=self.r[source];
+                let result=match kind {
+                    0xB200 => (value as u16 as i16 as i32) as u32, // SXTH
+                    0xB240 => (value as u8 as i8 as i32) as u32,  // SXTB
+                    0xB280 => value as u16 as u32,                // UXTH
+                    0xB2C0 => value as u8 as u32,                 // UXTB
+                    _ => { let f=CpuFault::UnsupportedInstruction(op); self.halted=true; self.last_fault=Some(f); return Err(f); }
+                };
+                self.r[rd]=result;
+            },
+            0xBA00..=0xBAFF => {
+                let kind=op&0xFFC0;
+                let source=((op>>3)&7) as usize;
+                let value=self.r[source];
+                let result=match kind {
+                    0xBA00 => value.swap_bytes(), // REV
+                    0xBA40 => ((value&0x00FF_00FF)<<8)|((value&0xFF00_FF00)>>8), // REV16
+                    0xBAC0 => ((value as u16).swap_bytes() as i16 as i32) as u32, // REVSH
+                    _ => { let f=CpuFault::UnsupportedInstruction(op); self.halted=true; self.last_fault=Some(f); return Err(f); }
+                };
+                self.r[rd]=result;
+            },
             0xB000..=0xB0FF => { let delta=((op&0x7f) as u32)*4; self.r[13]=if op&0x80!=0 {self.r[13].wrapping_sub(delta)} else {self.r[13].wrapping_add(delta)}; },
             0xD000..=0xDDFF => { let cond=(op>>8)&15; if cond<14 && self.condition(cond) {let off=(((op&0xff) as i8 as i32)<<1) as u32; self.r[15]=next.wrapping_add(2).wrapping_add(off);} },
             0xE000..=0xE7FF => { let off=(((op&0x7ff) as i16)<<5>>4) as u32; self.r[15]=next.wrapping_add(off); },
@@ -222,6 +247,19 @@ mod tests {
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[0],0xF800_0000);
         assert!(c.n); assert!(!c.z);
+    }
+    #[test]
+    fn executes_sxtb_and_rev_register_instructions() {
+        let mut m=MemoryStorage::new();
+        // SXTB r0, r1; REV r2, r3
+        m.write_u8(0,0x48); m.write_u8(1,0xB2);
+        m.write_u8(2,0x1A); m.write_u8(3,0xBA);
+        let mut c=ThumbCpu::new(); c.r[15]=0;
+        c.r[1]=0x1234_5680; c.r[3]=0x1234_5678;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[0],0xFFFF_FF80);
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[2],0x7856_3412);
     }
     #[test]
     fn executes_thumb2_addw_immediate() {
