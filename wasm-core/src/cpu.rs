@@ -192,6 +192,18 @@ mod tests {
         assert_eq!(c.instructions,2);
     }
     #[test]
+    fn executes_thumb2_ldr_immediate() {
+        let mut m=MemoryStorage::new();
+        m.write_u8(SRAM_BASE,0x78); m.write_u8(SRAM_BASE+1,0x56);
+        m.write_u8(SRAM_BASE+2,0x34); m.write_u8(SRAM_BASE+3,0x12);
+        // LDR.W r0, [r1, #0]
+        m.write_u8(0,0xD1); m.write_u8(1,0xF8);
+        m.write_u8(2,0x00); m.write_u8(3,0x00);
+        let mut c=ThumbCpu::new(); c.r[15]=0; c.r[1]=SRAM_BASE;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[0],0x1234_5678); assert_eq!(c.r[15],4);
+    }
+    #[test]
     fn unsupported_opcode_faults_explicitly() {
         let mut m=MemoryStorage::new();
         m.write_u8(0,0x00); m.write_u8(1,0xF0);
