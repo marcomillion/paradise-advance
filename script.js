@@ -366,6 +366,7 @@ function resizeCanvas(size, preserve = false) {
 
     updateCanvasInfo();
     updateSimulator();
+    updateZoom();
 
     updateCursorInfo("Canvas resized");
 }
