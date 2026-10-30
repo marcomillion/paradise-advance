@@ -41,6 +41,19 @@ impl ThumbCpu {
             else { self.r[rd]=(self.r[rd]&0xffff)|(imm<<16); }
             self.instructions=self.instructions.wrapping_add(1); return Ok(());
         }
+        // ADDW/SUBW immediate (flags are not changed by these encodings).
+        if (op1 & 0xFBF0)==0xF200 || (op1 & 0xFBF0)==0xF2A0 {
+            let rn=(op1&15) as usize;
+            let rd=((op2>>8)&15) as usize;
+            let imm=(((op1&15) as u32)<<12)
+                | (((op1>>10&1) as u32)<<11)
+                | (((op2>>12&7) as u32)<<8)
+                | (op2&0xff) as u32;
+            // The ADDW/SUBW immediate is split across i/imm3/imm8; Rn is in op1's low nibble.
+            let value=if (op1&0xFBF0)==0xF200 {self.r[rn].wrapping_add(imm)} else {self.r[rn].wrapping_sub(imm)};
+            self.r[rd]=value;
+            self.instructions=self.instructions.wrapping_add(1); return Ok(());
+        }
         // Common Thumb-2 immediate memory transfers: LDR/STR word, halfword and byte.
         let transfer = op1 & 0xFFF0;
         if matches!(transfer, 0xF8D0 | 0xF8C0 | 0xF890 | 0xF880 | 0xF8B0 | 0xF8A0) {
