@@ -651,7 +651,7 @@ mod tests {
     fn svc_enters_handler_and_stacks_architectural_context() {
         let mut m=MemoryStorage::new();
         m.pram[0..2].copy_from_slice(&0xDF01u16.to_le_bytes()); // SVC #1
-        m.pram[0x100..0x102].copy_from_slice(&0xBF00u16.to_le_bytes()); // handler NOP
+        m.pram[0x100..0x104].copy_from_slice(&[0x00,0xBF,0x70,0x47]); // NOP; BX LR
         for (i,b) in 0x101u32.to_le_bytes().iter().enumerate() { m.write_u8(11*4+i as u32,*b); }
         let initial_sp=crate::memory::SRAM_BASE+0x100;
         let mut c=ThumbCpu::new();
@@ -670,6 +670,20 @@ mod tests {
         assert_eq!(m.read_u32(initial_sp-4)&0xF000_0000,0xA000_0000);
         assert_eq!(c.ipsr,11);
         assert!(c.in_irq);
+
+        // Run the handler's NOP and BX LR, then exercise exception-return unstacking.
+        assert!(c.step(&mut m).is_ok());
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[15],0xFFFF_FFF8);
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[15],2);
+        assert_eq!(c.r[13],initial_sp);
+        assert_eq!(c.r[0],0x1111_1111);
+        assert_eq!(c.r[12],0xCCCC_CCCC);
+        assert_eq!(c.r[14],0x0000_0081);
+        assert_eq!(c.ipsr,0);
+        assert!(!c.in_irq);
+        assert!(c.n && !c.z && c.c && !c.v);
     }
 
     #[test]
