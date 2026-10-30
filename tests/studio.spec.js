@@ -49,6 +49,25 @@ test('emulator firmware button opens the local file picker', async ({ page }) =>
   expect(chooser).toBeTruthy();
 });
 
+test('keyboard activation of a device button sends the correct input pulse', async ({ page }) => {
+  await page.locator('[data-view="emulator"]').click();
+  await page.evaluate(() => {
+    window.__buttonInputEvents = [];
+    document.addEventListener('paradise:device-input', event => {
+      const detail = event.detail || {};
+      if (detail.source === 'keyboard' && ['A', 'B', 'C'].includes(detail.button)) {
+        window.__buttonInputEvents.push({ button: detail.button, pressed: detail.pressed });
+      }
+    });
+  });
+  await page.locator('[data-device-button="A"]').focus();
+  await page.locator('[data-device-button="A"]').press('Enter');
+  await expect.poll(() => page.evaluate(() => window.__buttonInputEvents)).toEqual([
+    { button: 'A', pressed: true },
+    { button: 'A', pressed: false }
+  ]);
+});
+
 test('keyboard zoom-dial input emits press and release events', async ({ page }) => {
   await page.locator('[data-view="emulator"]').click();
   await page.evaluate(() => {
