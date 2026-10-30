@@ -5,6 +5,8 @@ import init, { BrowserCpu, BrowserFirmwareInfo, search_device_key_candidates } f
 
 let ready = false;
 let cpu = null;
+let keySearchToken = 0;
+let keySearchRequestId = null;
 
 function postError(id, error) {
   self.postMessage({ id, ok: false, error: error instanceof Error ? error.message : String(error) });
