@@ -760,9 +760,11 @@ mod tests {
         // MRS r0, PRIMASK; MSR PRIMASK, r1
         m.write_u8(0,0xEF);m.write_u8(1,0xF3);m.write_u8(2,0x10);m.write_u8(3,0x80);
         m.write_u8(4,0x81);m.write_u8(5,0xF3);m.write_u8(6,0x10);m.write_u8(7,0x88);
-        let mut c=ThumbCpu::new();c.r[15]=0;c.primask=true;c.r[1]=0;
+        m.write_u8(8,0xEF);m.write_u8(9,0xF3);m.write_u8(10,0x05);m.write_u8(11,0x82);
+        let mut c=ThumbCpu::new();c.r[15]=0;c.primask=true;c.r[1]=0;c.ipsr=15;
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[0],1);
         assert!(c.step(&mut m).is_ok());assert!(!c.primask);
+        assert!(c.step(&mut m).is_ok());assert_eq!(c.r[2],15);
     }
     #[test]
     fn executes_thumb2_multiply_and_unsigned_divide() {
