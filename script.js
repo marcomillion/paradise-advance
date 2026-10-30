@@ -1,225 +1,308 @@
 const firmwareInput = document.getElementById("firmwareInput");
-const firmwareStatus = document.getElementById("firmwareStatus");
+const firmwareBadge = document.getElementById("firmwareBadge");
+const firmwareDetails = document.getElementById("firmwareDetails");
+const fileName = document.getElementById("fileName");
 
-const canvas = document.getElementById("spriteCanvas");
-const ctx = canvas.getContext("2d");
+const canvases = [...document.querySelectorAll(".sprite-canvas")];
+const simCanvas = document.getElementById("simCanvas");
+const simContext = simCanvas.getContext("2d");
 
-const colorInput = document.getElementById("pixelColor");
-const pencilButton = document.getElementById("pencilButton");
-const eraserButton = document.getElementById("eraserButton");
-const clearButton = document.getElementById("clearButton");
-const exportButton = document.getElementById("exportButton");
-const spriteLibrary = document.getElementById("spriteLibrary");
+const colorInputs = [...document.querySelectorAll(".pixel-color")];
+const toolButtons = [...document.querySelectorAll(".tool-button")];
+const clearButtons = [...document.querySelectorAll(".clear-button")];
+const exportButtons = [...document.querySelectorAll(".export-button")];
 
 const WIDTH = 16;
 const HEIGHT = 16;
 
 let pixels = Array.from(
-{ length: HEIGHT },
-() => Array(WIDTH).fill(null)
+    { length: HEIGHT },
+    () => Array(WIDTH).fill(null)
 );
 
-let tool = "pencil";
-let drawing = false;
+let selectedTool = "pencil";
+let selectedColor = "#ff806e";
 let loadedFirmware = null;
+let activePointers = new Set();
 
-function renderCanvas() {
-ctx.clearRect(0, 0, WIDTH, HEIGHT);
+// ----------------------------
+// WORKSPACE NAVIGATION
+// ----------------------------
 
-for (let y = 0; y < HEIGHT; y++) {
-    for (let x = 0; x < WIDTH; x++) {
-        if (pixels[y][x]) {
-            ctx.fillStyle = pixels[y][x];
-            ctx.fillRect(x, y, 1, 1);
+function showView(name) {
+    document.querySelectorAll(".mode-tab").forEach((tab) => {
+        const selected = tab.dataset.view === name;
+        tab.classList.toggle("active", selected);
+        tab.setAttribute("aria-pressed", String(selected));
+    });
+
+    document.querySelectorAll(".view").forEach((view) => {
+        view.classList.toggle("active", view.id === `view-${name}`);
+    });
+}
+
+document.querySelectorAll(".mode-tab").forEach((tab) => {
+    tab.addEventListener("click", () => showView(tab.dataset.view));
+});
+
+document.querySelectorAll("[data-go]").forEach((button) => {
+    button.addEventListener("click", () => showView(button.dataset.go));
+});
+
+// ----------------------------
+// PIXEL EDITOR
+// ----------------------------
+
+function renderCanvas(canvas) {
+    const context = canvas.getContext("2d");
+
+    context.clearRect(0, 0, WIDTH, HEIGHT);
+
+    for (let y = 0; y < HEIGHT; y++) {
+        for (let x = 0; x < WIDTH; x++) {
+            if (pixels[y][x] !== null) {
+                context.fillStyle = pixels[y][x];
+                context.fillRect(x, y, 1, 1);
+            }
         }
     }
 }
 
+function renderAll() {
+    canvases.forEach(renderCanvas);
+    renderCanvas(simCanvas);
 }
 
-function setTool(nextTool) {
-tool = nextTool;
+function chooseTool(tool) {
+    selectedTool = tool;
 
-pencilButton.classList.toggle("active", tool === "pencil");
-eraserButton.classList.toggle("active", tool === "eraser");
-
+    toolButtons.forEach((button) => {
+        button.classList.toggle(
+            "active",
+            button.dataset.tool === selectedTool
+        );
+    });
 }
 
-function getPixelPosition(event) {
-const rect = canvas.getBoundingClientRect();
-
-const x = Math.floor(
-    ((event.clientX - rect.left) / rect.width) * WIDTH
-);
-
-const y = Math.floor(
-    ((event.clientY - rect.top) / rect.height) * HEIGHT
-);
-
-if (x < 0 || x >= WIDTH || y < 0 || y >= HEIGHT) {
-    return null;
-}
-
-return { x, y };
-
-}
-
-function paintPixel(event) {
-const position = getPixelPosition(event);
-
-if (!position) return;
-
-const { x, y } = position;
-
-pixels[y][x] = tool === "eraser" ? null : colorInput.value;
-
-renderCanvas();
-
-}
-
-canvas.addEventListener("pointerdown", (event) => {
-drawing = true;
-canvas.setPointerCapture(event.pointerId);
-paintPixel(event);
+toolButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+        chooseTool(button.dataset.tool);
+    });
 });
 
-canvas.addEventListener("pointermove", (event) => {
-if (drawing) {
-paintPixel(event);
-}
-});
+function chooseColor(color) {
+    selectedColor = color;
 
-function stopDrawing() {
-drawing = false;
+    colorInputs.forEach((input) => {
+        input.value = color;
+    });
 }
 
-canvas.addEventListener("pointerup", stopDrawing);
-canvas.addEventListener("pointercancel", stopDrawing);
-canvas.addEventListener("lostpointercapture", stopDrawing);
-
-pencilButton.addEventListener("click", () => {
-setTool("pencil");
+colorInputs.forEach((input) => {
+    input.addEventListener("input", () => chooseColor(input.value));
 });
 
-eraserButton.addEventListener("click", () => {
-setTool("eraser");
+document.querySelectorAll("[data-color]").forEach((swatch) => {
+    swatch.addEventListener("click", () => {
+        chooseColor(swatch.dataset.color);
+        showView("lab");
+    });
 });
 
-clearButton.addEventListener("click", () => {
-pixels = Array.from(
-{ length: HEIGHT },
-() => Array(WIDTH).fill(null)
-);
+function paintAt(canvas, event) {
+    const rect = canvas.getBoundingClientRect();
 
-renderCanvas();
+    const x = Math.floor(
+        ((event.clientX - rect.left) / rect.width) * WIDTH
+    );
 
+    const y = Math.floor(
+        ((event.clientY - rect.top) / rect.height) * HEIGHT
+    );
+
+    if (x < 0 || x >= WIDTH || y < 0 || y >= HEIGHT) {
+        return;
+    }
+
+    pixels[y][x] = selectedTool === "eraser" ? null : selectedColor;
+
+    renderAll();
+}
+
+canvases.forEach((canvas) => {
+    canvas.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+
+        activePointers.add(event.pointerId);
+        canvas.setPointerCapture(event.pointerId);
+        paintAt(canvas, event);
+    });
+
+    canvas.addEventListener("pointermove", (event) => {
+        if (activePointers.has(event.pointerId)) {
+            event.preventDefault();
+            paintAt(canvas, event);
+        }
+    });
+
+    function stopDrawing(event) {
+        activePointers.delete(event.pointerId);
+    }
+
+    canvas.addEventListener("pointerup", stopDrawing);
+    canvas.addEventListener("pointercancel", stopDrawing);
+    canvas.addEventListener("lostpointercapture", stopDrawing);
 });
+
+clearButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+        const confirmed = window.confirm(
+            "Clear the entire sprite? This cannot be undone."
+        );
+
+        if (!confirmed) return;
+
+        pixels = Array.from(
+            { length: HEIGHT },
+            () => Array(WIDTH).fill(null)
+        );
+
+        renderAll();
+    });
+});
+
+// ----------------------------
+// PNG EXPORT
+// ----------------------------
+
+function createExportCanvas() {
+    const output = document.createElement("canvas");
+
+    output.width = WIDTH;
+    output.height = HEIGHT;
+
+    const context = output.getContext("2d");
+
+    for (let y = 0; y < HEIGHT; y++) {
+        for (let x = 0; x < WIDTH; x++) {
+            if (pixels[y][x] !== null) {
+                context.fillStyle = pixels[y][x];
+                context.fillRect(x, y, 1, 1);
+            }
+        }
+    }
+
+    return output;
+}
+
+exportButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+        const output = createExportCanvas();
+
+        output.toBlob((blob) => {
+            if (!blob) {
+                alert("PNG export failed. Please try again.");
+                return;
+            }
+
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+
+            link.href = url;
+            link.download = "paradise-sprite.png";
+
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }, "image/png");
+    });
+});
+
+// ----------------------------
+// LOCAL FIRMWARE INSPECTOR
+// ----------------------------
+
+function formatBytes(bytes) {
+    if (bytes < 1024) {
+        return `${bytes.toLocaleString()} bytes`;
+    }
+
+    if (bytes < 1024 * 1024) {
+        return `${(bytes / 1024).toFixed(2)} KB`;
+    }
+
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
 
 firmwareInput.addEventListener("change", async () => {
-const file = firmwareInput.files[0];
+    const file = firmwareInput.files[0];
 
-if (!file) return;
+    if (!file) return;
 
-try {
-    firmwareStatus.textContent = "Reading file locally…";
-    firmwareStatus.classList.remove("success");
+    firmwareBadge.textContent = "● READING FILE";
+    firmwareBadge.classList.remove("loaded");
 
-    // Read the file into browser memory. Nothing is uploaded.
-    const buffer = await file.arrayBuffer();
+    try {
+        // Read the file locally. It is never uploaded to a server.
+        const buffer = await file.arrayBuffer();
 
-    loadedFirmware = {
-        name: file.name,
-        size: buffer.byteLength,
-        bytes: new Uint8Array(buffer)
-    };
+        loadedFirmware = {
+            name: file.name,
+            size: buffer.byteLength,
+            bytes: new Uint8Array(buffer)
+        };
 
-    const sizeText = loadedFirmware.size.toLocaleString();
+        firmwareBadge.textContent = "● FILE LOADED";
+        firmwareBadge.classList.add("loaded");
 
-    firmwareStatus.textContent =
-        `Loaded: ${loadedFirmware.name} · ${sizeText} bytes. ` +
-        "Firmware extraction is not implemented yet.";
+        fileName.textContent = file.name;
 
-    firmwareStatus.classList.add("success");
-} catch (error) {
-    loadedFirmware = null;
-    firmwareStatus.textContent =
-        "Unable to read this file. Please try another file.";
-    console.error(error);
-}
+        firmwareDetails.replaceChildren();
 
-});
+        const icon = document.createElement("div");
+        icon.className = "empty-symbol";
+        icon.textContent = "✓";
 
-function createSpriteBlob() {
-const exportCanvas = document.createElement("canvas");
+        const info = document.createElement("div");
 
-exportCanvas.width = WIDTH;
-exportCanvas.height = HEIGHT;
+        const name = document.createElement("strong");
+        name.textContent = loadedFirmware.name;
 
-const exportCtx = exportCanvas.getContext("2d");
+        const size = document.createElement("p");
+        size.textContent = `File size: ${formatBytes(loadedFirmware.size)}`;
 
-for (let y = 0; y < HEIGHT; y++) {
-    for (let x = 0; x < WIDTH; x++) {
-        if (pixels[y][x]) {
-            exportCtx.fillStyle = pixels[y][x];
-            exportCtx.fillRect(x, y, 1, 1);
-        }
+        const status = document.createElement("p");
+        status.textContent =
+            "File read successfully. Sprite extraction is not available yet.";
+
+        info.append(name, size, status);
+        firmwareDetails.append(icon, info);
+    } catch (error) {
+        loadedFirmware = null;
+
+        firmwareBadge.textContent = "● READ FAILED";
+        fileName.textContent = "No file selected";
+
+        firmwareDetails.textContent =
+            "The file could not be read. Try selecting it again.";
+
+        console.error("Firmware read error:", error);
     }
-}
-
-return new Promise((resolve) => {
-    exportCanvas.toBlob(resolve, "image/png");
 });
 
+// ----------------------------
+// SIMULATOR PREVIEW
+// ----------------------------
+
+function updateSimulator() {
+    renderCanvas(simCanvas);
 }
 
-exportButton.addEventListener("click", async () => {
-const blob = await createSpriteBlob();
+window.addEventListener("resize", updateSimulator);
 
-if (!blob) {
-    alert("Could not export the sprite. Please try again.");
-    return;
-}
-
-const downloadUrl = URL.createObjectURL(blob);
-const link = document.createElement("a");
-
-link.href = downloadUrl;
-link.download = "paradise-sprite.png";
-link.click();
-
-setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
-
-addSpriteToLibrary(blob);
-
-});
-
-function addSpriteToLibrary(blob) {
-if (spriteLibrary.querySelector(".empty-library")) {
-spriteLibrary.innerHTML = "";
-}
-
-const card = document.createElement("div");
-card.className = "sprite-card";
-
-const preview = document.createElement("img");
-const previewUrl = URL.createObjectURL(blob);
-
-preview.src = previewUrl;
-preview.alt = "Exported pixel sprite";
-preview.width = 96;
-preview.height = 96;
-preview.style.imageRendering = "pixelated";
-preview.style.background = "#252c3b";
-preview.style.borderRadius = "6px";
-
-const label = document.createElement("p");
-label.textContent = "Custom sprite · 16 × 16";
-label.className = "small-note";
-
-card.append(preview, label);
-spriteLibrary.prepend(card);
-
-}
-
-renderCanvas();
-setTool("pencil");
+renderAll();
+chooseTool("pencil");
+chooseColor("#ff806e");
+showView("studio");
