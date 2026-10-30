@@ -63,7 +63,7 @@ impl ThumbCpu {
             let (result,carry)=match (op1>>5)&3 {
                 0=>{let r=if amount>=32 {0}else{value.wrapping_shl(amount)};let c=if amount==0 {self.c}else if amount<=32 {(value>>(32-amount.min(32)))&1!=0}else{false};(r,c)},
                 1=>{let r=if amount>=32 {0}else{value>>amount};let c=if amount==0 {self.c}else if amount<=32 {(value>>(amount-1).min(31))&1!=0}else{false};(r,c)},
-                2=>{let r=if amount>=32 {if value as i32<0 {u32::MAX}else{0}}else{((value as i32)>>amount) as u32};let c=if amount==0 {self.c}else if amount>=32 {(value>>31)!=0}else{(value>>(amount-1))&1!=0};(r,c)},
+                2=>{let r=if amount>=32 {if (value as i32)<0 {u32::MAX}else{0}}else{((value as i32)>>amount) as u32};let c=if amount==0 {self.c}else if amount>=32 {(value>>31)!=0}else{(value>>(amount-1))&1!=0};(r,c)},
                 _=>{let r=if amount==0 {value}else{value.rotate_right(amount)};let c=if amount==0 {self.c}else{r>>31!=0};(r,c)},
             };
             self.r[rd]=result;if set_flags {self.set_nz(result);self.c=carry;}
@@ -551,7 +551,7 @@ mod tests {
         // BFC r0, #0, #3; SBFX r2, r1, #8, #8; LSL.W r3, r1, r0
         m.write_u8(0,0x6F);m.write_u8(1,0xF3);m.write_u8(2,0x02);m.write_u8(3,0x00);
         m.write_u8(4,0x41);m.write_u8(5,0xF3);m.write_u8(6,0x07);m.write_u8(7,0x22);
-        m.write_u8(8,0x01);m.write_u8(9,0xFA);m.write_u8(10,0x03);m.write_u8(11,0xF0);
+        m.write_u8(8,0x01);m.write_u8(9,0xFA);m.write_u8(10,0x00);m.write_u8(11,0xF3);
         let mut c=ThumbCpu::new();c.r[15]=0;c.r[0]=0xFFFF_FFFF;c.r[1]=0x0000_8000;
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[0],0xFFFF_FFF8);
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[2],0xFFFF_FF80);
