@@ -1,12 +1,13 @@
 //! Portable browser-facing components for the real Paradise emulator.
 //! Firmware inspection is real; CPU execution and decryption are not yet integrated.
 
+mod aes;
 mod display;
 mod sonix;
 mod memory;
 use wasm_bindgen::prelude::*;
 pub use display::{DisplayController, LCD_HEIGHT, LCD_WIDTH};
-pub use sonix::{find_tables, CipherMode, LoadTable, Region};
+pub use sonix::{find_tables, decrypt_dump_with_key, CipherMode, LoadTable, Region};
 pub use memory::{MemoryStorage, RegionKind};
 
 #[wasm_bindgen]
@@ -72,3 +73,13 @@ impl BrowserMemory {
     pub fn reset_vector_pc(&self) -> u32 { self.memory.read_u32(0x0800_0004) }
 }
 impl Default for BrowserMemory { fn default() -> Self { Self::new() } }
+
+/// Decrypts the firmware's encrypted regions using a user-provided 32-bit device key.
+/// The returned bytes are held in memory only; this function does not execute firmware.
+#[wasm_bindgen]
+pub fn decrypt_firmware_with_key(bytes: &[u8], device_key: u32) -> Result<Vec<u8>, JsValue> {
+    if bytes.len() != 16 * 1024 * 1024 {
+        return Err(JsValue::from_str("Expected a 16 MiB flash dump."));
+    }
+    decrypt_dump_with_key(bytes, device_key).map_err(JsValue::from_str)
+}
