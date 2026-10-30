@@ -685,7 +685,7 @@ mod tests {
         assert_eq!(c.r[15],0x100);
         assert!(c.in_irq);
         assert_eq!(c.ipsr,15);
-        assert_eq!(m.read_cpu_u32(c.r[13]+24),6);
+        assert_eq!(m.read_u32(c.r[13]+24),6);
         assert!(!m.systick_pending);
     }
 
@@ -733,7 +733,7 @@ mod tests {
         assert!(c.in_irq);
         assert!(!c.sleeping);
         assert_eq!(c.r[0],0);
-        assert_eq!(m.read_cpu_u32(c.r[13]+24),2); // stacked PC resumes after WFI
+        assert_eq!(m.read_u32(c.r[13]+24),2); // stacked PC resumes after WFI
     }
 
     #[test]
@@ -752,11 +752,11 @@ mod tests {
         assert_eq!(c.r[15],0x100);
         assert_eq!(c.r[14],0xFFFF_FFF9);
         assert_eq!(c.r[13],initial_sp-32);
-        assert_eq!(m.read_cpu_u32(initial_sp-32),0x1111_1111);
-        assert_eq!(m.read_cpu_u32(initial_sp-28),0x2222_2222);
-        assert_eq!(m.read_cpu_u32(initial_sp-12),0x0000_0081);
-        assert_eq!(m.read_cpu_u32(initial_sp-8),2);
-        assert_eq!(m.read_cpu_u32(initial_sp-4)&0xF000_0000,0xA000_0000);
+        assert_eq!(m.read_u32(initial_sp-32),0x1111_1111);
+        assert_eq!(m.read_u32(initial_sp-28),0x2222_2222);
+        assert_eq!(m.read_u32(initial_sp-12),0x0000_0081);
+        assert_eq!(m.read_u32(initial_sp-8),2);
+        assert_eq!(m.read_u32(initial_sp-4)&0xF000_0000,0xA000_0000);
         assert_eq!(c.ipsr,11);
         assert!(c.in_irq);
 
@@ -786,9 +786,9 @@ mod tests {
         c.r[13]=initial_sp; c.r[0]=0x1122_3344; c.r[2]=0x5566_7788; c.r[14]=0x101;
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[13],initial_sp-12);
-        assert_eq!(m.read_cpu_u32(initial_sp-12),0x1122_3344);
-        assert_eq!(m.read_cpu_u32(initial_sp-8),0x5566_7788);
-        assert_eq!(m.read_cpu_u32(initial_sp-4),0x101);
+        assert_eq!(m.read_u32(initial_sp-12),0x1122_3344);
+        assert_eq!(m.read_u32(initial_sp-8),0x5566_7788);
+        assert_eq!(m.read_u32(initial_sp-4),0x101);
         c.r[0]=0; c.r[2]=0; c.r[15]=2;
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[0],0x1122_3344);
@@ -1068,7 +1068,7 @@ mod tests {
         m.write_u8(4,0xB3);m.write_u8(5,0xE8);m.write_u8(6,0x30);m.write_u8(7,0x00);
         let mut c=ThumbCpu::new();c.r[15]=0;c.r[0]=0x100;c.r[1]=0x1111;c.r[2]=0x2222;c.r[3]=0x100;
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[0],0x108);
-        assert_eq!(m.read_cpu_u32(0x100),0x1111);assert_eq!(m.read_cpu_u32(0x104),0x2222);
+        assert_eq!(m.read_u32(0x100),0x1111);assert_eq!(m.read_u32(0x104),0x2222);
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[3],0x108);
         assert_eq!(c.r[4],0x1111);assert_eq!(c.r[5],0x2222);
     }
@@ -1082,7 +1082,7 @@ mod tests {
         m.write_u8(0x100,0x78);m.write_u8(0x101,0x56);m.write_u8(0x102,0x34);m.write_u8(0x103,0x12);
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[0],0x1234_5678);
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[2],0);
-        assert_eq!(m.read_cpu_u32(0x100),0xABCD_1234);
+        assert_eq!(m.read_u32(0x100),0xABCD_1234);
     }
     #[test]
     fn clrex_clears_exclusive_reservation_before_strex() {
@@ -1099,7 +1099,7 @@ mod tests {
         assert!(c.step(&mut m).is_ok());
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[2],1);
-        assert_eq!(m.read_cpu_u32(0x100),0x1234_5678);
+        assert_eq!(m.read_u32(0x100),0x1234_5678);
     }
 
     #[test]
