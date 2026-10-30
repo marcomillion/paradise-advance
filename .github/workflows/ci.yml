@@ -23,6 +23,7 @@ jobs:
         run: |
           node --check app.js
           node --check emulator.js
+          node --check build.js
           node --input-type=module --check < wasm-core/browser-worker.js
           node --check playwright.config.js
       - name: Install browser test dependencies
@@ -31,6 +32,15 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Run browser smoke tests
         run: npm run test:e2e
+      - name: Build distributable website
+        run: npm run build
+      - name: Upload website bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: paradise-mod-studio-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
       - name: Verify generated WASM package exists
         run: |
           test -s wasm-core/pkg/paradise_wasm_core.js
