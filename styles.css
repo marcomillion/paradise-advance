@@ -216,3 +216,8 @@
   .zoom-dial{width:56px;height:56px}
   .device-button{width:33px;height:33px}
 }
+
+/* Live emulator connection action */
+.emulator-external-link{display:flex;align-items:center;justify-content:center;text-align:center;text-decoration:none;margin:12px 14px 0;width:calc(100% - 28px)}
+.preview-settings>.notice{margin:14px}
+.preview-settings>.notice b{color:var(--mint)}
