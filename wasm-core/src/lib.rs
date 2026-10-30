@@ -213,6 +213,17 @@ mod browser_integration_tests {
     }
 
     #[test]
+    fn browser_cpu_exposes_all_four_input_lines_and_rejects_invalid_indices() {
+        let mut cpu = BrowserCpu::new();
+        assert!(cpu.set_button(0, true).is_ok());
+        assert!(cpu.set_button(1, true).is_ok());
+        assert!(cpu.set_button(2, true).is_ok());
+        assert!(cpu.set_button(3, true).is_ok());
+        assert!(cpu.set_button(4, true).is_err());
+        assert!(cpu.set_button(3, false).is_ok());
+    }
+
+    #[test]
     fn unencrypted_sonix_image_loads_and_executes_its_user_code() {
         let mut image = vec![0xFFu8; crate::memory::FLASH_SIZE];
         image[..8].copy_from_slice(b"SONIXDEV");
