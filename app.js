@@ -31,3 +31,34 @@ function renderGallery(){const grid=$('galleryGrid');grid.innerHTML='';if(!state
 async function loadFirmware(file){if(!file)return;const buf=await file.arrayBuffer(),bytes=new Uint8Array(buf),header=Array.from(bytes.slice(0,64)).map(v=>v.toString(16).padStart(2,'0')).join(' ').match(/.{1,47}/g)?.join('\n')||'Empty file';let hash='Unavailable';if(crypto.subtle){const digest=await crypto.subtle.digest('SHA-256',buf);hash=Array.from(new Uint8Array(digest)).map(v=>v.toString(16).padStart(2,'0')).join('')}state.firmware={name:file.name,size:bytes.length,bytes,hash};$('firmwareName').textContent=file.name;$('firmwareSummary').textContent='Loaded in memory for this browser session. This page does not upload or patch the source file.';$('firmwareSize').textContent=(bytes.length/1048576).toFixed(2)+' MiB';$('firmwareHeader').textContent=Array.from(bytes.slice(0,8)).map(v=>v.toString(16).padStart(2,'0')).join(' ').toUpperCase();$('firmwareHash').textContent=hash;$('headerDump').textContent=header;const block=65536,regions=[];for(let off=0;off<bytes.length;off+=block){const chunk=bytes.subarray(off,Math.min(off+block,bytes.length));let ff=0,zero=0;for(const v of chunk){if(v===255)ff++;if(v===0)zero++}regions.push({ff:ff/chunk.length,zero:zero/chunk.length})}const map=$('regionMap');map.innerHTML='';regions.forEach((r,i)=>{const el=document.createElement('div');el.className='region-block';el.title=`0x${(i*block).toString(16).toUpperCase()} · FF ${(r.ff*100).toFixed(0)}% · 00 ${(r.zero*100).toFixed(0)}%`;el.style.opacity=String(.25+Math.max(r.ff,r.zero)*.75);map.append(el)});toast('Firmware loaded for local inspection')}
 $('loadFirmwareBtn').onclick=$('firmwareLoadAgain').onclick=()=>$('firmwareInput').click();$('firmwareInput').onchange=e=>loadFirmware(e.target.files[0]);$('importSpriteBtn').onclick=()=>$('spriteInput').click();$('spriteInput').onchange=e=>loadSpriteFile(e.target.files[0]);$('galleryImportBtn').onclick=()=>$('galleryInput').click();$('galleryInput').onchange=e=>loadSpriteFile(e.target.files[0],true);$('newSpriteBtn').onclick=()=>createSprite();$('exportPngBtn').onclick=()=>exportPng();$('exportJsonBtn').onclick=()=>exportJson();$('undoBtn').onclick=undo;$('redoBtn').onclick=redo;$('clearBtn').onclick=()=>{const s=active();if(!s)return toast('Create or select a sprite first');snap();s.pixels.fill(null);renderAll()};$('flipBtn').onclick=()=>{const s=active();if(!s)return; snap();for(let y=0;y<s.height;y++)for(let x=0;x<Math.floor(s.width/2);x++){const a=y*s.width+x,b=y*s.width+(s.width-1-x);[s.pixels[a],s.pixels[b]]=[s.pixels[b],s.pixels[a]]}renderAll()};$('resizeBtn').onclick=()=>{const s=active();if(!s)return toast('Create or select a sprite first');const w=Math.max(1,Math.min(256,Number($('spriteWidth').value)||s.width)),h=Math.max(1,Math.min(256,Number($('spriteHeight').value)||s.height));snap();const next=Array(w*h).fill(null);for(let y=0;y<Math.min(h,s.height);y++)for(let x=0;x<Math.min(w,s.width);x++)next[y*w+x]=s.pixels[y*s.width+x];s.width=w;s.height=h;s.pixels=next;renderAll()};$('spriteName').onchange=()=>{const s=active();if(s){s.name=$('spriteName').value.trim()||'Untitled Sprite';renderAssets();$('currentSpriteName').textContent=s.name.toUpperCase()}};$('zoomSlider').oninput=e=>{state.zoom=Number(e.target.value);$('zoomValue').textContent=state.zoom+'×';renderCanvas()};$('gridToggle').onchange=e=>{state.grid=e.target.checked;renderCanvas()};$('colorPicker').oninput=e=>setColor(e.target.value);$('addColorBtn').onclick=()=>{const s=active();if(s&&!s.palette.includes(state.color)){s.palette.push(state.color);renderPalette()}};document.querySelectorAll('.tool').forEach(b=>b.onclick=()=>setTool(b.dataset.tool));document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>nav(b.dataset.view));$('previewBg').oninput=renderPreview;$('previewScale').oninput=renderPreview;$('previewChecker').onchange=renderPreview;$('downloadPreviewBtn').onclick=()=>{const c=$('previewCanvas');c.toBlob(blob=>exportBlob(blob,'paradise-preview.png'))};
 renderAll();
+
+/* Experimental raw bitmap candidate scanner. Results are guesses, not decoded firmware assets. */
+function scanRawCandidates(){
+ const fw=state.firmware;if(!fw)return toast('Load firmware first');
+ const bits=Number($('scanFormat').value),dim=$('scanSize').value;
+ let w,h;if(dim.includes('x'))[w,h]=dim.split('x').map(Number);else w=h=Number(dim);
+ const nbytes=Math.ceil(w*h*bits/8),data=fw.bytes,grid=$('candidateGrid'),found=[];
+ grid.innerHTML='';
+ for(let off=0;off+nbytes<=data.length&&found.length<80;off+=2){
+  let min=255,max=0,sum=0;for(let i=0;i<nbytes;i++){const v=data[off+i];min=Math.min(min,v);max=Math.max(max,v);sum+=v}
+  if(max-min<20)continue;const mean=sum/nbytes;let variance=0;
+  for(let i=0;i<nbytes;i++)variance+=(data[off+i]-mean)**2;variance/=nbytes;
+  if(variance<250||variance>14000)continue;
+  found.push(off);
+ }
+ $('candidateCount').textContent=found.length;
+ $('scanStatus').textContent=found.length?'Possible raw bitmap patterns only — not confirmed sprites. Compression, palettes and tile layouts are not decoded.':'No candidates matched this simple scan. The graphics may use compression or another format.';
+ if(!found.length){grid.textContent='No candidates found for these settings.';return}
+ for(const off of found){
+  const card=document.createElement('article');card.className='candidate-card';
+  const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+  const ctx=cv.getContext('2d'),im=ctx.createImageData(w,h);
+  for(let p=0;p<w*h;p++){let v;if(bits===1)v=((data[off+(p>>3)]>>(7-(p&7)))&1)*255;else if(bits===2)v=((data[off+(p>>2)]>>(6-((p&3)*2)))&3)*85;else v=((data[off+(p>>1)]>>((p&1)?0:4))&15)*17;const k=p*4;im.data[k]=im.data[k+1]=im.data[k+2]=v;im.data[k+3]=255}
+  ctx.putImageData(im,0,0);cv.className='candidate-art';cv.style.width=(w*4)+'px';cv.style.height=(h*4)+'px';
+  const label=document.createElement('b');label.textContent=w+' × '+h;
+  const meta=document.createElement('small');meta.textContent='Offset 0x'+off.toString(16).toUpperCase().padStart(6,'0');
+  const btn=document.createElement('button');btn.className='button';btn.textContent='Export PNG';btn.onclick=()=>{const out=document.createElement('canvas');out.width=w;out.height=h;out.getContext('2d').drawImage(cv,0,0,w,h);out.toBlob(blob=>exportBlob(blob,'candidate_'+off.toString(16)+'.png'))};
+  card.append(cv,label,meta,btn);grid.append(card);
+ }
+}
+if($('scanFirmwareBtn'))$('scanFirmwareBtn').onclick=scanRawCandidates;
