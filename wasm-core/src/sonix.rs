@@ -76,6 +76,31 @@ mod tests {
         b[0x14..0x18].copy_from_slice(&0x10000u32.to_le_bytes());
         b[0x1f8..0x1fc].copy_from_slice(&VERSION_V3.to_le_bytes()); b
     }
+    #[test]
+    fn key_search_finds_a_synthetic_encrypted_vector_block() {
+        let mut bytes=vec![0xFFu8;16*1024*1024];
+        let mut table=sample();
+        for i in 0..32 { table[0x28+i]=i as u8; }
+        bytes[..TABLE_STRIDE].copy_from_slice(&table);
+        let device_key=0x1234_5678u32;
+        let mut reversed_key=[0u8;32];
+        reversed_key.copy_from_slice(&table[0x28..0x48]);
+        reversed_key.reverse();
+        let aes_region=Aes::new(&reversed_key);
+        let aes_iv=Aes::new(&reversed_key[..16]);
+        let mut iv=[0u8;16]; iv.copy_from_slice(&reversed_key[16..32]);
+        for (i,b) in iv.iter_mut().enumerate(){*b^=device_key.to_be_bytes()[i%4];}
+        let iv=aes_iv.encrypt_block(&iv);
+        let words=[0x1802_0000u32,0x0000_0101,0x0000_0111,0x0000_0121];
+        let mut plain=[0u8;16];
+        for i in 0..4 { plain[i*4..i*4+4].copy_from_slice(&words[i].to_le_bytes()); }
+        plain.reverse();
+        for i in 0..16 { plain[i]^=iv[i]; }
+        let mut cipher=aes_region.encrypt_block(&plain);
+        cipher.reverse();
+        bytes[0x1000..0x1010].copy_from_slice(&cipher);
+        assert_eq!(search_device_key_chunk(&bytes,device_key,1).unwrap(),Some(device_key));
+    }
     #[test] fn parses_v3_encrypted_sonix_table() {
         let t=LoadTable::parse(&sample(),0).unwrap();
         assert_eq!(t.magic,"SONIXDEV"); assert_eq!(t.version,VERSION_V3);
