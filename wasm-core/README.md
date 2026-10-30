@@ -10,13 +10,13 @@ Implemented and covered by CI:
 - Sonix CBC/OFB encrypted-region decryption when a user supplies the 32-bit device key; decryption operates on an in-memory copy.
 - Chunked browser-side device-key candidate search based on the first encrypted vector block, with progress and cancellation; it stays local and can take a very long time across the full 32-bit space.
 - SNC73410 PRAM, boot-ROM, SRAM, mailbox and flash storage regions.
-- Incremental Thumb interpreter for common 16-bit instructions plus Thumb-2 MOVW/MOVT and BL; includes immediate operations, shifts, ALU operations, loads/stores, branches, stack and block transfers.
+- Incremental Thumb interpreter for common 16-bit instructions plus selected Thumb-2 MOVW/MOVT, BL/B.W, modified-immediate and shifted-register ALU operations, signed loads, LDRD/STRD, LDM/STM, LDREX/STREX, bit-field operations, CLZ, multiply/divide, IT blocks, MRS/MSR, and barriers. Unsupported encodings still fault explicitly.
 - Browser bindings to load a Sonix image with a supplied key, copy its declared user-code region into PRAM, validate the reset vector, and step/run instructions.
-- Experimental framebuffer bridge: after each CPU step/batch, the display snapshot is refreshed from the configured SRAM framebuffer base and exposed through the CPU WASM API.
+- Experimental framebuffer bridge: after each CPU step/batch, a recognized DMA transfer to the LCD panel data register updates the display framebuffer; otherwise the snapshot is refreshed from the configured SRAM framebuffer base.
 - Unit tests for display conversion, memory regions, Sonix table parsing, AES primitives, and selected CPU instructions.
 
 Not yet implemented / known limitations:
-- Full ARMv7-M/Thumb instruction coverage, general exception handling and accurate CPU timing. A narrow DMA-completion IRQ 58 path and the corresponding NVIC enable/clear-enable bits are implemented, but the NVIC model is not general-purpose.
+- Full ARMv7-M/Thumb instruction coverage, nested/general exception handling, accurate CPU cycle timing, and complete special-register behavior. A narrow DMA-completion IRQ 58 path, SysTick exception, PRIMASK, ITSTATE and corresponding NVIC enable/clear-enable bits are implemented, but this is not a complete Cortex-M exception/NVIC model.
 - Real boot ROM behavior and the chip's full memory aliases / MMIO bus dispatch.
 - Most hardware peripherals are not yet wired to the CPU: timers, SPI, flash controller, interrupt priorities/pending state and much of the MMIO map remain missing. The current DMA path supports the observed channel register layout and transfers into the LCD panel data register, but is not a complete DMA controller and does not prove the retail display driver works.
 - Complete initialization behavior required by the retail firmware.
