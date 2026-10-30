@@ -114,7 +114,25 @@ document.querySelectorAll('[data-device-button]').forEach(btn=>{
  btn.addEventListener('pointerdown',()=>btn.classList.add('pressed'));
  const release=()=>btn.classList.remove('pressed');
  btn.addEventListener('pointerup',release);btn.addEventListener('pointercancel',release);btn.addEventListener('pointerleave',release);
- btn.addEventListener('click',event=>{if(event.detail===0){reportDeviceInput('Button '+labels[name]+' pressed',{type:'button',button:name,pressed:true,source:'keyboard'});setTimeout(()=>reportDeviceInput('Button '+labels[name]+' released',{type:'button',button:name,pressed:false,source:'keyboard'}),80);}else reportDeviceInput('Button '+labels[name]+' pressed',{type:'button',button:name});});
+ let keyboardActivation=false;
+  btn.addEventListener('keydown',event=>{
+    if((event.key==='Enter'||event.key===' ')&&!event.repeat){
+      event.preventDefault();keyboardActivation=true;btn.classList.add('pressed');
+      reportDeviceInput('Button '+labels[name]+' pressed',{type:'button',button:name,pressed:true,source:'keyboard'});
+    }
+  });
+  btn.addEventListener('keyup',event=>{
+    if(event.key==='Enter'||event.key===' '){
+      event.preventDefault();keyboardActivation=false;btn.classList.remove('pressed');
+      reportDeviceInput('Button '+labels[name]+' released',{type:'button',button:name,pressed:false,source:'keyboard'});
+    }
+  });
+  btn.addEventListener('blur',()=>{if(keyboardActivation){keyboardActivation=false;btn.classList.remove('pressed');reportDeviceInput('Button '+labels[name]+' released',{type:'button',button:name,pressed:false,source:'keyboard'});}});
+  btn.addEventListener('click',event=>{
+    if(event.detail===0){
+      if(!keyboardActivation){reportDeviceInput('Button '+labels[name]+' pressed',{type:'button',button:name,pressed:true,source:'keyboard'});setTimeout(()=>reportDeviceInput('Button '+labels[name]+' released',{type:'button',button:name,pressed:false,source:'keyboard'}),80);}
+    } else reportDeviceInput('Button '+labels[name]+' pressed',{type:'button',button:name});
+  });
 });
 const dial=$('zoomDial');let dialDragging=false,dialLastX=0,dialAngle=0,dialRemainder=0;
 function rotateDial(delta,source='pointer'){
