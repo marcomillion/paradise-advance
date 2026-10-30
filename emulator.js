@@ -116,6 +116,7 @@
       setStatus('Firmware inspection failed', error.message || String(error));
     }
   }
+  $('emulatorLoadFirmwareBtn')?.addEventListener('click', () => fileInput?.click());
   fileInput?.addEventListener('change', event => { inspectSelectedFile(event.target.files?.[0]); });
   $('emulatorStartCpuBtn')?.addEventListener('click', async () => {
     if (!firmwareBytes || !firmwareInfo) return;
