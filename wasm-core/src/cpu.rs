@@ -33,6 +33,42 @@ impl ThumbCpu {
         let second=m.read_u8(pc.wrapping_add(2)) as u16 | ((m.read_u8(pc.wrapping_add(3)) as u16)<<8);
         let op1=first; let op2=second;
         self.r[15]=pc.wrapping_add(4);
+        // BFI/BFC/SBFX/UBFX bit-field operations.
+        if (op1&0xFBF0)==0xF340 || (op1&0xFBF0)==0xF360 || (op1&0xFBF0)==0xF3C0 {
+            let rn=(op1&0xF) as usize;
+            let rd=((op2>>8)&0xF) as usize;
+            let lsb=((((op2>>12)&7)<<2)|((op2>>6)&3)) as u32;
+            if (op1&0x00F0)==0x0060 {
+                let msb=(op2&0x1F) as u32;
+                if msb<lsb { let f=CpuFault::UnsupportedInstruction(op1);self.halted=true;self.last_fault=Some(f);return Err(f); }
+                let width=msb-lsb+1;
+                let mask=((((1u64<<width)-1)<<lsb)&0xFFFF_FFFF) as u32;
+                let current=self.r[rd];
+                let inserted=if rn==15 {0}else{self.r[rn].wrapping_shl(lsb)};
+                self.r[rd]=(current&!mask)|(inserted&mask);
+            } else {
+                let width=((op2&0x1F) as u32)+1;
+                let mask=(((1u64<<width)-1)&0xFFFF_FFFF) as u32;
+                let mut value=(self.r[rn]>>lsb)&mask;
+                if (op1&0x00F0)==0x0040 && width<32 && value&(1<<(width-1))!=0 { value|=!mask; }
+                self.r[rd]=value;
+            }
+            self.instructions=self.instructions.wrapping_add(1);return Ok(());
+        }
+        // LSL/LSR/ASR/ROR by register (no memory-system side effects).
+        if (op1&0xFF80)==0xFA00 && (op2&0xF0F0)==0xF000 {
+            let rn=(op1&0xF) as usize;let rm=(op2&0xF) as usize;
+            let rd=((op2>>8)&0xF) as usize;let set_flags=op1&0x0010!=0;
+            let value=self.r[rn];let amount=self.r[rm]&0xFF;
+            let (result,carry)=match (op1>>5)&3 {
+                0=>{let r=if amount>=32 {0}else{value.wrapping_shl(amount)};let c=if amount==0 {self.c}else if amount<=32 {(value>>(32-amount.min(32)))&1!=0}else{false};(r,c)},
+                1=>{let r=if amount>=32 {0}else{value>>amount};let c=if amount==0 {self.c}else if amount<=32 {(value>>(amount-1).min(31))&1!=0}else{false};(r,c)},
+                2=>{let r=if amount>=32 {if value as i32<0 {u32::MAX}else{0}}else{((value as i32)>>amount) as u32};let c=if amount==0 {self.c}else if amount>=32 {(value>>31)!=0}else{(value>>(amount-1))&1!=0};(r,c)},
+                _=>{let r=if amount==0 {value}else{value.rotate_right(amount)};let c=if amount==0 {self.c}else{r>>31!=0};(r,c)},
+            };
+            self.r[rd]=result;if set_flags {self.set_nz(result);self.c=carry;}
+            self.instructions=self.instructions.wrapping_add(1);return Ok(());
+        }
         // B.W unconditional: reconstruct the signed 25-bit PC-relative offset.
         if (op1&0xF800)==0xF000 && (op2&0xD000)==0x9000 {
             let sign=((op1>>10)&1) as u32;
@@ -508,6 +544,18 @@ mod tests {
         let mut c=ThumbCpu::new(); c.r[15]=0; c.r[1]=0x1000;
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[0],0x1234); assert_eq!(c.r[15],4);
+    }
+    #[test]
+    fn executes_thumb2_bfc_sbfx_and_lsl_register() {
+        let mut m=MemoryStorage::new();
+        // BFC r0, #0, #3; SBFX r2, r1, #8, #8; LSL.W r3, r1, r0
+        m.write_u8(0,0x6F);m.write_u8(1,0xF3);m.write_u8(2,0x02);m.write_u8(3,0x00);
+        m.write_u8(4,0x41);m.write_u8(5,0xF3);m.write_u8(6,0x07);m.write_u8(7,0x22);
+        m.write_u8(8,0x01);m.write_u8(9,0xFA);m.write_u8(10,0x03);m.write_u8(11,0xF0);
+        let mut c=ThumbCpu::new();c.r[15]=0;c.r[0]=0xFFFF_FFFF;c.r[1]=0x0000_8000;
+        assert!(c.step(&mut m).is_ok());assert_eq!(c.r[0],0xFFFF_FFF8);
+        assert!(c.step(&mut m).is_ok());assert_eq!(c.r[2],0xFFFF_FF80);
+        c.r[0]=5;assert!(c.step(&mut m).is_ok());assert_eq!(c.r[3],0x0010_0000);
     }
     #[test]
     fn executes_thumb2_b_w_and_barrier_hints() {
