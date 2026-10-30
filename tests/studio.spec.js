@@ -87,6 +87,28 @@ test('keyboard zoom-dial input emits press and release events', async ({ page })
   ]);
 });
 
+test('invalid workspace backup is rejected without replacing the current workspace', async ({ page }) => {
+  await page.locator('#newSpriteBtn').click();
+  await page.locator('#spriteName').fill('Keep This Sprite');
+  await page.locator('#spriteName').press('Tab');
+
+  const invalid = {
+    format: 'paradise-mod-studio-workspace',
+    version: 1,
+    sprites: [{ id: 'bad', name: 'Oversized', width: 999, height: 999, pixels: [] }],
+    gallery: [],
+    activeId: 'bad'
+  };
+  await page.locator('#workspaceInput').setInputFiles({
+    name: 'invalid-workspace.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(invalid))
+  });
+  await expect(page.locator('#toast')).toContainText('invalid dimensions');
+  await expect(page.locator('#spriteCount')).toHaveText('1');
+  await expect(page.locator('#currentSpriteName')).toHaveText('KEEP THIS SPRITE');
+});
+
 test('workspace backup restores sprites, gallery drafts, preferences, and animation', async ({ page }) => {
   const sprite = (id, name, color) => ({
     id, name, width: 2, height: 2,
