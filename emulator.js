@@ -165,33 +165,96 @@
       $('emulatorStepBtn').disabled = true; $('emulatorRunBtn').disabled = true;
     }
   });
+  let activeKeyWorkers = [];
+  let keySearchCancelled = false;
   $('searchDeviceKeyBtn')?.addEventListener('click', async () => {
+    const searchStatus = $('deviceKeySearchStatus');
     if (!firmwareBytes || !firmwareInfo) {
-      $('deviceKeySearchStatus').textContent = 'Choose a valid 16 MiB firmware dump first.';
+      searchStatus.textContent = 'Choose a valid 16 MiB firmware dump first.';
       return;
     }
     if (!firmwareInfo.encrypted) {
-      $('deviceKeySearchStatus').textContent = 'This firmware table is marked unencrypted; a device-key search is unnecessary.';
+      searchStatus.textContent = 'This firmware table is marked unencrypted; a device-key search is unnecessary.';
       return;
     }
-    const searchBtn=$('searchDeviceKeyBtn');
-    const cancelBtn=$('cancelDeviceKeySearchBtn');
-    searchBtn.disabled=true; cancelBtn.disabled=false;
-    $('deviceKeySearchStatus').textContent='Starting local key search. This can take a very long time; keep this tab open.';
+    const searchBtn = $('searchDeviceKeyBtn');
+    const cancelBtn = $('cancelDeviceKeySearchBtn');
+    const keySpace = 4294967296;
+    const lanes = Math.max(1, Math.min(8, (Number(navigator.hardwareConcurrency) || 2) - 1));
+    const chunkSize = 250000;
+    let finished = 0;
+    let tested = 0;
+    let foundKey = null;
+    let failure = null;
+    keySearchCancelled = false;
+    activeKeyWorkers = [];
+    searchBtn.disabled = true;
+    cancelBtn.disabled = false;
+    searchStatus.textContent = 'Starting parallel local search across ' + lanes + ' worker(s)…';
+    const terminateWorkers = () => {
+      for (const worker of activeKeyWorkers) worker.terminate();
+      activeKeyWorkers = [];
+    };
     try {
-      const result=await request('search-key',{bytes:firmwareBytes,chunkSize:1000000});
-      if (result.cancelled) {
-        $('deviceKeySearchStatus').textContent='Key search cancelled. No key was sent anywhere.';
-      } else if (result.found) {
-        $('deviceKeyInput').value=formatHex(result.key);
-        $('deviceKeySearchStatus').textContent='Candidate key found after checking ' + Number(result.tested).toLocaleString() + ' candidates. Try loading firmware to validate it.';
+      await new Promise((resolve, reject) => {
+        const bytes = firmwareBytes;
+        const workers = [];
+        for (let lane = 0; lane < lanes; lane++) {
+          const worker = new Worker('wasm-core/key-search-worker.js', { type: 'module' });
+          workers.push(worker);
+          activeKeyWorkers.push(worker);
+          worker.onmessage = event => {
+            const data = event.data || {};
+            if (data.type === 'progress') {
+              tested += Number(data.delta || 0);
+              searchStatus.textContent = 'Parallel search: ' + tested.toLocaleString() + ' / ' + keySpace.toLocaleString() +
+                ' candidates (' + (tested * 100 / keySpace).toFixed(4) + '%). ' + lanes +
+                ' worker(s) · local only · ' + (tested / keySpace * 100).toFixed(2) + '% of key space.';
+              return;
+            }
+            if (data.type === 'found') {
+              foundKey = Number(data.key) >>> 0;
+              terminateWorkers();
+              resolve();
+              return;
+            }
+            if (data.type === 'done') {
+              finished++;
+              if (finished === lanes) resolve();
+              return;
+            }
+            if (data.type === 'error') {
+              failure = new Error(data.error || 'A key-search worker failed.');
+              terminateWorkers();
+              reject(failure);
+            }
+          };
+          worker.onerror = event => {
+            failure = new Error(event.message || 'A key-search worker failed.');
+            terminateWorkers();
+            reject(failure);
+          };
+          worker.postMessage({ type: 'search', bytes, lane, lanes, chunkSize });
+        }
+      });
+      if (keySearchCancelled) {
+        searchStatus.textContent = 'Key search cancelled. No key was sent anywhere.';
+      } else if (foundKey !== null) {
+        $('deviceKeyInput').value = formatHex(foundKey);
+        searchStatus.textContent = 'Candidate key ' + formatHex(foundKey) + ' found. Load firmware to validate it; the key was found locally.';
+      } else if (failure) {
+        searchStatus.textContent = 'Key search failed: ' + failure.message;
       } else {
-        $('deviceKeySearchStatus').textContent='No candidate matched the full 32-bit key space.';
+        searchStatus.textContent = 'No candidate matched the full 32-bit key space.';
       }
     } catch (error) {
-      $('deviceKeySearchStatus').textContent='Key search failed: ' + (error.message || String(error));
+      searchStatus.textContent = keySearchCancelled
+        ? 'Key search cancelled. No key was sent anywhere.'
+        : 'Key search failed: ' + (error.message || String(error));
     } finally {
-      searchBtn.disabled=false; cancelBtn.disabled=true;
+      terminateWorkers();
+      searchBtn.disabled = false;
+      cancelBtn.disabled = true;
     }
   });
   $('cancelDeviceKeySearchBtn')?.addEventListener('click', async () => {
