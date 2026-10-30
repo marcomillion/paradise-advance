@@ -68,6 +68,11 @@ impl MemoryStorage {
         }
     }
     pub fn read_u8(&self, address: u32) -> u8 {
+        if (0x4000_F000..0x4000_F138).contains(&address) {
+            let offset=address-0x4000_F000;
+            let reg=self.dma_registers[(offset/4) as usize];
+            return ((reg >> ((offset&3)*8)) & 0xff) as u8;
+        }
         if (0x4003_1000..0x4003_1008).contains(&address) {
             let reg=self.gpio_register((address-0x4003_1000)&!3);
             return ((reg >> ((address&3)*8)) & 0xff) as u8;
