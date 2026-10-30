@@ -661,6 +661,35 @@ mod tests {
     }
 
     #[test]
+    fn primask_defers_pending_systick_until_interrupts_are_enabled() {
+        let mut m=MemoryStorage::new();
+        m.pram[0..6].copy_from_slice(&[0x30,0xBF,0x2A,0x20,0x62,0xB6]); // WFI; MOVS r0,#42; CPSIE i
+        m.pram[0x100..0x102].copy_from_slice(&0xBF00u16.to_le_bytes());
+        for (i,b) in 0x101u32.to_le_bytes().iter().enumerate() { m.write_u8(15*4+i as u32,*b); }
+        m.systick_ctrl=3;
+        m.systick_reload=1;
+        m.systick_current=1;
+        let mut c=ThumbCpu::new();
+        c.r[13]=crate::memory::SRAM_BASE+0x100;
+        c.r[15]=0;
+        c.primask=true;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[15],2);
+        assert!(!c.sleeping);
+        assert!(!c.in_irq);
+        assert!(m.systick_pending);
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[0],42);
+        assert_eq!(c.r[15],4);
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[15],0x100);
+        assert!(c.in_irq);
+        assert_eq!(c.ipsr,15);
+        assert_eq!(m.read_u32(c.r[13]+24),6);
+        assert!(!m.systick_pending);
+    }
+
+    #[test]
     fn sev_sets_event_and_wfe_consumes_it() {
         let mut m=MemoryStorage::new();
         m.pram[0..6].copy_from_slice(&[0x40,0xBF,0x20,0xBF,0x30,0xBF]); // SEV; WFE; WFI
