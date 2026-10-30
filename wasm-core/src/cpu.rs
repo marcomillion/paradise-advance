@@ -325,6 +325,22 @@ mod tests {
         assert_eq!(c.r[2],0x7856_3412);
     }
     #[test]
+    fn dma_completion_irq_enters_handler_and_returns_to_thread() {
+        let mut m=MemoryStorage::new();
+        m.pram[0..2].copy_from_slice(&0xBF00u16.to_le_bytes()); // NOP
+        m.pram[0x128..0x12C].copy_from_slice(&0x1000_0101u32.to_le_bytes());
+        m.flash[0x100..0x102].copy_from_slice(&0x4770u16.to_le_bytes()); // BX LR
+        let mut c=ThumbCpu::new(); c.r[13]=crate::memory::SRAM_BASE+crate::memory::SRAM_SIZE as u32;
+        c.r[15]=0; m.dma_irq_pending=true;
+        assert!(c.step(&mut m).is_ok());
+        assert!(c.in_irq); assert_eq!(c.r[15],0x1000_0100);
+        assert_eq!(c.r[13],crate::memory::SRAM_BASE+crate::memory::SRAM_SIZE as u32-32);
+        assert!(c.step(&mut m).is_ok()); assert_eq!(c.r[15],0xFFFF_FFF8);
+        assert!(c.step(&mut m).is_ok());
+        assert!(!c.in_irq); assert_eq!(c.r[15],2);
+        assert_eq!(c.r[13],crate::memory::SRAM_BASE+crate::memory::SRAM_SIZE as u32);
+    }
+    #[test]
     fn executes_thumb2_addw_immediate() {
         let mut m=MemoryStorage::new();
         // ADDW r0, r1, #0x234
