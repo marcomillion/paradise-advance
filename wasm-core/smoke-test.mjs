@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { BrowserCpu, BrowserDisplay, BrowserFirmwareInfo, initSync } from "./pkg/paradise_wasm_core.js";
+import { BrowserCpu, BrowserDisplay, BrowserFirmwareInfo, search_device_key_candidates, initSync } from "./pkg/paradise_wasm_core.js";
 
 initSync(readFileSync(new URL("./pkg/paradise_wasm_core_bg.wasm", import.meta.url)));
 
@@ -15,4 +15,8 @@ let rejectedInvalidDump = false;
 try { new BrowserFirmwareInfo(new Uint8Array(32)); } catch { rejectedInvalidDump = true; }
 if (!rejectedInvalidDump) throw new Error("Firmware inspector accepted an invalid-sized dump");
 
-console.log("WASM smoke test passed: display, CPU stepping, and firmware validation bindings.");
+let rejectedInvalidKeySearch = false;
+try { search_device_key_candidates(new Uint8Array(32), 0, 1); } catch { rejectedInvalidKeySearch = true; }
+if (!rejectedInvalidKeySearch) throw new Error("Device-key search accepted a dump without a Sonix table");
+
+console.log("WASM smoke test passed: display, CPU stepping, firmware validation, and key-search bindings.");
