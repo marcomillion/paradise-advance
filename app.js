@@ -93,11 +93,11 @@ function validateSpritePackage(data, absoluteOffset, length, sourceArchiveOffset
   if(off<first || off<prev || off+24>length) return null;
   prev=off;
  }
- const firstHeader=parseSpriteHeader(data,absoluteOffset+readU32(data,absoluteOffset),length);
+ const firstHeader=parseSpriteHeader(data,absoluteOffset+readU32(data,absoluteOffset),absoluteOffset+length);
  if(!firstHeader) return null;
  let valid=0;
  for(let i=0;i<Math.min(count,16);i++){
-  const h=parseSpriteHeader(data,absoluteOffset+readU32(data,absoluteOffset+i*4),length);
+  const h=parseSpriteHeader(data,absoluteOffset+readU32(data,absoluteOffset+i*4),absoluteOffset+length);
   if(h) valid++;
  }
  if(valid<Math.min(count,3)) return null;
@@ -158,7 +158,7 @@ function rleDecode(src, wordwise, maxOutput) {
 function decodeParadiseSpriteFrame(pkg, assetIndex, frameIndex, paletteSet=0) {
  const fw=state.firmware;if(!fw) throw new Error('No firmware loaded');
  const all=fw.bytes, base=pkg.offset, rel=readU32(all,base+assetIndex*4), start=base+rel;
- const h=parseSpriteHeader(all,start,pkg.length);
+ const h=parseSpriteHeader(all,start,base+pkg.length);
  if(!h) throw new Error('Invalid sprite header');
  if(frameIndex<0||frameIndex>=h.count) throw new Error('Frame index is outside this sprite package');
  const pixelsPerFrame=h.width*h.height;
