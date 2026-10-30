@@ -42,3 +42,26 @@ The web UI is now explicitly marked as unavailable until the real WASM core is i
 ## Main technical blocker
 
 The CPU/peripheral core must be separated from native-only dependencies and compiled/tested for `wasm32-unknown-unknown`. Firmware decryption/key recovery also needs a browser-appropriate implementation; relying on native multithreading without a deliberate WASM threading design will not work on ordinary static hosting. A placeholder module or an empty WASM binary must never be presented as an emulator.
+
+
+## Portability audit (2026-10-30)
+
+The first source-level audit confirms the core can be separated, but it is not a one-line WASM build:
+
+- `src/emulator/loader.rs` currently reads the dump with `std::fs::read(path)` and resolves a device key from a path. The browser-facing loader must accept `&[u8]` plus an explicit optional key, and must never perform filesystem access.
+- `src/emulator/mod.rs` includes `std::path::Path` / `PathBuf` in the machine API and implements file-backed save states. The portable machine API should be separated from native save-file management; browser saves should serialize state to bytes and persist through IndexedDB.
+- `src/emulator/peripherals/display.rs` imports `egui::Color32` solely to convert the display buffer. The hardware display controller should expose RGB565 pixels or RGBA bytes without depending on egui; native UI conversion can remain in the desktop frontend.
+- `src/emulator/peripherals/mod.rs` has the hardware peripheral set needed for a real machine, including display, GPIO, DMA, timers, XIP and flash control. These should be ported as a group with the CPU and memory bus, not replaced by JavaScript pet logic.
+- The dump's load table marks the user-code region encrypted. The existing loader explicitly does not boot an encrypted image without a valid device key. The browser UI must surface this requirement rather than claiming that file recognition means the firmware is bootable.
+- Capybara's `recherche_cle` implementation uses native threads to search the full 32-bit device-key space. That brute-force path is not suitable to run synchronously on the page. A browser strategy needs worker-based execution and a clear progress/cancellation API, or a user-provided key. We must not hide an expensive search behind a frozen UI.
+
+## Implementation order (no fake-success checkpoints)
+
+1. Extract a portable machine/loader API that accepts firmware bytes and has no `std::fs`, `PathBuf`, `egui`, `eframe`, audio-device, serial-port, tray or native-dialog dependency.
+2. Vendor/adapt the CPU, memory bus and all firmware-relevant peripheral modules under the applicable GPL-3.0-only terms, retaining notices and documenting modifications.
+3. Add a `wasm-bindgen` wrapper with load/reset/step/input/framebuffer/save-state operations.
+4. Compile for `wasm32-unknown-unknown` in CI and fix compile errors against the actual target. Do not add an empty placeholder WASM artifact.
+5. Test a known-good unencrypted test image first, then the user's encrypted dump once key handling is available. Verify that the screen pixels originate from `DisplayController`.
+6. Connect the Worker to `emulator.js`; only then change the status from “core not integrated” to “core running”.
+
+**Status of this audit:** source inspected; no WASM core has been ported or compiled yet. The browser still does not execute firmware.
