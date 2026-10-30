@@ -169,9 +169,15 @@ impl MemoryStorage {
         }
     }
     fn bitband_target(address:u32)->Option<(u32,u32)> {
-        if !(0x4200_0000..=0x43FF_FFFF).contains(&address) { return None; }
-        let delta=address-0x4200_0000;
-        Some((0x4000_0000+delta/32,(delta%32)/4))
+        if (0x2200_0000..=0x23FF_FFFF).contains(&address) {
+            let delta=address-0x2200_0000;
+            return Some((0x2000_0000+delta/32,(delta%32)/4));
+        }
+        if (0x4200_0000..=0x43FF_FFFF).contains(&address) {
+            let delta=address-0x4200_0000;
+            return Some((0x4000_0000+delta/32,(delta%32)/4));
+        }
+        None
     }
     fn gpio_register(&self, offset: u32) -> u32 {
         match offset {
@@ -185,7 +191,7 @@ impl MemoryStorage {
             let reg=self.spi_read_reg((address-0x4000_E000)&!3);
             return ((reg>>((address&3)*8))&0xFF) as u8;
         }
-        if (0x4200_0000..=0x43FF_FFFF).contains(&address) {
+        if (0x2200_0000..=0x23FF_FFFF).contains(&address) || (0x4200_0000..=0x43FF_FFFF).contains(&address) {
             let word=self.read_u32(address & !3);
             return ((word >> ((address&3)*8)) & 0xFF) as u8;
         }
@@ -241,7 +247,7 @@ impl MemoryStorage {
     }
     pub fn read_u32(&self, address: u32) -> u32 {
         if (0x4000_E000..=0x4000_E01F).contains(&address) { return self.spi_read_reg((address-0x4000_E000)&!3); }
-        if (0x4200_0000..=0x43FF_FFFF).contains(&address) {
+        if (0x2200_0000..=0x23FF_FFFF).contains(&address) || (0x4200_0000..=0x43FF_FFFF).contains(&address) {
             if let Some((target,bit))=Self::bitband_target(address) { return ((self.read_u8(target)>>bit)&1) as u32; }
         }
         u32::from_le_bytes([self.read_u8(address),self.read_u8(address.wrapping_add(1)),
@@ -269,7 +275,7 @@ impl MemoryStorage {
             else { let current=self.spi_read_reg(offset);let mask=!(0xFFu32<<shift);self.spi_write_reg(offset,(current&mask)|((value as u32)<<shift)); }
             return true;
         }
-        if (0x4200_0000..=0x43FF_FFFF).contains(&address) {
+        if (0x2200_0000..=0x23FF_FFFF).contains(&address) || (0x4200_0000..=0x43FF_FFFF).contains(&address) {
             if address&3!=0 { return true; }
             if let Some((target,bit))=Self::bitband_target(address) {
                 let old=self.read_u8(target);
@@ -421,6 +427,18 @@ mod tests {
         assert_eq!(m.read_u32(0x4001_8000)&(1<<10),0);
         m.rotate_dial(1);
         assert_eq!(m.read_u32(0x4001_A000)&3,1);
+    }
+    #[test]
+    fn sram_bitband_alias_reads_and_writes_mailbox_bits() {
+        let mut m=MemoryStorage::new();
+        let target=MAILBOX_BASE+0x10;
+        let alias=0x2200_0000+(target-0x2000_0000)*32+5*4;
+        assert!(m.write_u32(alias,1));
+        assert_eq!(m.read_u8(target),1<<5);
+        assert_eq!(m.read_u32(alias),1);
+        assert!(m.write_u32(alias,0));
+        assert_eq!(m.read_u8(target),0);
+        assert_eq!(m.read_u32(alias),0);
     }
     #[test]
     fn spi0_control_status_and_data_registers_are_mapped() {
