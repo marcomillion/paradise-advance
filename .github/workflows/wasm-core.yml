@@ -34,3 +34,15 @@ jobs:
           targets: wasm32-unknown-unknown
       - name: Compile core for the browser
         run: cargo build --manifest-path wasm-core/Cargo.toml --target wasm32-unknown-unknown --release
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+      - name: Package browser module and JavaScript bindings
+        run: wasm-pack build wasm-core --target web --out-dir pkg --release
+      - name: Upload browser package
+        uses: actions/upload-artifact@v4
+        with:
+          name: paradise-wasm-display-component
+          path: wasm-core/pkg/
+          if-no-files-found: error
