@@ -173,7 +173,7 @@ test('emulator status reports the browser core instead of showing a fake pet', a
   await expect(page.locator('#keySearchTested')).toHaveText('—');
   await expect(page.locator('#keySearchRate')).toHaveText('—');
   await expect(page.locator('#keySearchPeakRate')).toHaveText('—');
-  await expect(page.locator('#keySearchProgressTrack')).toHaveAttribute('aria-valuenow', '0');
+  await expect(page.locator('#keySearchProgressTrack')).toHaveAttribute('aria-valuenow', '0.000000');
 });
 
 test('device key is remembered only after explicit opt-in', async ({ page }) => {
