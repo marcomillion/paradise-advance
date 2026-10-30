@@ -59,6 +59,45 @@ impl ThumbCpu {
         let second=m.read_u8(pc.wrapping_add(2)) as u16 | ((m.read_u8(pc.wrapping_add(3)) as u16)<<8);
         let op1=first; let op2=second;
         self.r[15]=pc.wrapping_add(4);
+        // Table branch: TBB / TBH.
+        if (op1&0xFFF0)==0xE8D0 && (op2&0xFFE0)==0xF000 {
+            let rn=(op1&0xF) as usize;let rm=(op2&0xF) as usize;
+            let is_tbh=op2&0x10!=0;
+            let base=if rn==15 {self.r[15]}else{self.r[rn]};
+            let table=base.wrapping_add(if is_tbh {self.r[rm].wrapping_mul(2)}else{self.r[rm]});
+            let offset=if is_tbh {m.read_u8(table) as u32|((m.read_u8(table+1) as u32)<<8)}else{m.read_u8(table) as u32};
+            self.r[15]=self.r[15].wrapping_add(offset<<1);
+            self.instructions=self.instructions.wrapping_add(1);return Ok(());
+        }
+        // LDRD / STRD immediate, including pre/post-index and optional writeback.
+        if (op1&0xFE40)==0xE840 {
+            let p=(op1>>8)&1;let u=(op1>>7)&1;let writeback=(op1>>5)&1;
+            let is_load=op1&0x10!=0;
+            if p!=0 || writeback!=0 {
+                let rn=(op1&0xF) as usize;let rt=((op2>>12)&0xF) as usize;
+                let rt2=((op2>>8)&0xF) as usize;let imm=((op2&0xFF) as u32)<<2;
+                let base=self.r[rn];let offset=if u!=0 {base.wrapping_add(imm)}else{base.wrapping_sub(imm)};
+                let address=if p!=0 {offset}else{base};
+                if is_load {self.r[rt]=m.read_u32(address);self.r[rt2]=m.read_u32(address.wrapping_add(4));}
+                else {let a=self.r[rt];let b=self.r[rt2];for i in 0..4 {m.write_u8(address+i,(a>>(i*8)) as u8);m.write_u8(address+4+i,(b>>(i*8)) as u8);}}
+                if writeback!=0 {self.r[rn]=offset;}
+                self.instructions=self.instructions.wrapping_add(1);return Ok(());
+            }
+        }
+        // LDM/STM multiple-register transfers (increment-after and decrement-before).
+        if (op1&0xFE40)==0xE800 && matches!((op1>>7)&3,1|2) {
+            let decrement_before=((op1>>7)&3)==2;let is_load=op1&0x10!=0;let writeback=op1&0x20!=0;
+            let rn=(op1&0xF) as usize;let list=op2;let count=list.count_ones();let base=self.r[rn];
+            let mut address=if decrement_before {base.wrapping_sub(4*count)}else{base};
+            for reg in 0..16 {
+                if list&(1<<reg)==0 {continue;}
+                if is_load {self.r[reg]=m.read_u32(address);}
+                else {let value=self.r[reg];for i in 0..4 {m.write_u8(address+i,(value>>(i*8)) as u8);}}
+                address=address.wrapping_add(4);
+            }
+            if writeback {self.r[rn]=if decrement_before {base.wrapping_sub(4*count)}else{base.wrapping_add(4*count)};}
+            self.instructions=self.instructions.wrapping_add(1);return Ok(());
+        }
         // Thumb-2 shifted-register and modified-immediate data-processing operations.
         let is_shifted=(op1&0xFE00)==0xEA00 || (op1&0xFE00)==0xEB00;
         let is_modified_imm=(op1&0xFA00)==0xF000 && (op2&0x8000)==0;
@@ -692,6 +731,18 @@ mod tests {
         let mut c=ThumbCpu::new();c.r[15]=0;c.r[1]=0x100;
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[0],0xFF);
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[2],0x1FF);
+    }
+    #[test]
+    fn executes_thumb2_ldrd_and_tbb() {
+        let mut m=MemoryStorage::new();
+        // LDRD r0, r1, [r2]; TBB [r3, r4]
+        m.write_u8(0,0xD2);m.write_u8(1,0xE9);m.write_u8(2,0x01);m.write_u8(3,0x01);
+        m.write_u8(4,0xD3);m.write_u8(5,0xE8);m.write_u8(6,0x01);m.write_u8(7,0xF0);
+        m.write_u8(0x100,0x34);m.write_u8(0x101,0x12);m.write_u8(0x104,0x78);m.write_u8(0x105,0x56);
+        m.write_u8(0x202,3);
+        let mut c=ThumbCpu::new();c.r[15]=0;c.r[2]=0x100;c.r[3]=0x200;c.r[4]=2;
+        assert!(c.step(&mut m).is_ok());assert_eq!(c.r[0],0x1234);assert_eq!(c.r[1],0x5678);
+        assert!(c.step(&mut m).is_ok());assert_eq!(c.r[15],10);
     }
     #[test]
     fn executes_thumb2_clz() {
