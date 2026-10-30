@@ -1,0 +1,17 @@
+{
+  "name": "paradise-wasm-core",
+  "type": "module",
+  "description": "Portable browser-facing hardware components for the Paradise firmware emulator",
+  "version": "0.1.0",
+  "license": "GPL-3.0-only",
+  "files": [
+    "paradise_wasm_core_bg.wasm",
+    "paradise_wasm_core.js",
+    "paradise_wasm_core.d.ts"
+  ],
+  "main": "paradise_wasm_core.js",
+  "types": "paradise_wasm_core.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
