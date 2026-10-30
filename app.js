@@ -3,6 +3,37 @@ const $=id=>document.getElementById(id);
 const state={sprites:[],activeId:null,tool:'pencil',color:'#211c36',grid:true,zoom:10,history:[],redo:[],firmware:null,gallery:[]};
 const animationState={frames:[],selected:-1,timer:null};
 const starterPalette=['#211c36','#f4f2ff','#ff9fc8','#9bf2d2','#a99bff','#ffdb91','#5677a8','#e6f6ee'];
+
+const WORKSPACE_STORAGE_KEY='paradiseModStudio.workspace.v1';
+let workspaceSaveTimer=null,workspaceStorageWarningShown=false;
+function validSavedSprite(s){
+ return s&&typeof s==='object'&&Number.isInteger(s.width)&&Number.isInteger(s.height)&&s.width>=1&&s.height>=1&&s.width<=256&&s.height<=256&&Array.isArray(s.pixels)&&s.pixels.length===s.width*s.height;
+}
+function restoreWorkspace(){
+ try{
+  const raw=localStorage.getItem(WORKSPACE_STORAGE_KEY);if(!raw)return;
+  const saved=JSON.parse(raw);if(!saved||saved.version!==1)return;
+  const normalise=list=>list.filter(validSavedSprite).slice(0,200).map(s=>({...s,id:String(s.id||uid()),name:String(s.name||'Untitled Sprite').slice(0,64),pixels:s.pixels.map(c=>typeof c==='string'&&/^#[0-9a-f]{6}$/i.test(c)?c:null),palette:Array.isArray(s.palette)?s.palette.filter(c=>typeof c==='string'&&/^#[0-9a-f]{6}$/i.test(c)).slice(0,64):[...starterPalette]}));
+  if(Array.isArray(saved.sprites))state.sprites=normalise(saved.sprites);
+  if(Array.isArray(saved.gallery))state.gallery=normalise(saved.gallery);
+  state.activeId=state.sprites.some(s=>s.id===saved.activeId)?saved.activeId:(state.sprites[0]?.id||null);
+  if(typeof saved.color==='string'&&/^#[0-9a-f]{6}$/i.test(saved.color))state.color=saved.color;
+  if(typeof saved.grid==='boolean')state.grid=saved.grid;
+  if(Number.isFinite(saved.zoom))state.zoom=Math.max(4,Math.min(20,saved.zoom));
+ }catch(_){/* Storage can be disabled or contain an old/corrupt workspace. */}
+}
+function scheduleWorkspaceSave(){
+ clearTimeout(workspaceSaveTimer);
+ workspaceSaveTimer=setTimeout(()=>{
+  try{
+   const payload={version:1,sprites:state.sprites,gallery:state.gallery,activeId:state.activeId,color:state.color,grid:state.grid,zoom:state.zoom};
+   localStorage.setItem(WORKSPACE_STORAGE_KEY,JSON.stringify(payload));
+  }catch(_){
+   if(!workspaceStorageWarningShown){workspaceStorageWarningShown=true;toast('Browser storage is full or unavailable. Export your sprite JSON to keep a backup.');}
+  }
+ },250);
+}
+
 function uid(){return 's'+Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
 function toast(s){const t=$('toast');t.textContent=s;t.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.classList.remove('show'),2800)}
 function active(){return state.sprites.find(s=>s.id===state.activeId)||null}
@@ -17,7 +48,7 @@ function renderPalette(){const s=active(),p=$('palette');p.innerHTML='';(s?s.pal
 function setColor(c){state.color=c;$('colorPicker').value=c;renderPalette()}
 function renderAssets(){const list=$('assetList');list.innerHTML='';$('spriteCount').textContent=state.sprites.length;if(!state.sprites.length){list.innerHTML='<div class="empty-state">No sprites loaded yet.<br><small>Import a PNG or create a blank sprite.</small></div>';return}for(const s of state.sprites){const b=document.createElement('button');b.className='asset-item'+(s.id===state.activeId?' active':'');const cv=document.createElement('canvas');cv.className='asset-thumb';cv.width=s.width;cv.height=s.height;drawSprite(cv,s);const d=document.createElement('div'),strong=document.createElement('strong'),small=document.createElement('small');strong.textContent=s.name;small.textContent=`${s.width} × ${s.height}`;d.append(strong,small);b.append(cv,d);b.onclick=()=>{state.activeId=s.id;renderAll()};list.append(b)}}
 function renderPreview(){if(typeof window.paradiseBrowserPetDraw==='function'){window.paradiseBrowserPetDraw();return}const c=$('previewCanvas');const ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);ctx.fillStyle='#f6fdff';ctx.fillRect(0,0,c.width,c.height);$('previewEmpty').style.display='grid';$('previewEmpty').innerHTML='128 × 128 DISPLAY<br>CORE NOT CONNECTED';if(!state.firmware){applyParadiseEdition({edition:'water',confidence:'default'});}}
-function renderAll(){renderAssets();renderCanvas();renderGallery()}
+function renderAll(){renderAssets();renderCanvas();renderGallery();scheduleWorkspaceSave()}
 function canvasPos(e){const c=$('spriteCanvas'),r=c.getBoundingClientRect(),s=active();return {x:Math.floor((e.clientX-r.left)/r.width*s.width),y:Math.floor((e.clientY-r.top)/r.height*s.height)}}
 function applyPixel(x,y){const s=active();if(!s||x<0||y<0||x>=s.width||y>=s.height)return;const i=y*s.width+x;if(state.tool==='picker'){const c=s.pixels[i];if(c)setColor(c);return}if(state.tool==='fill'){const old=s.pixels[i],next=state.color;if(old===next)return;snap();const stack=[[x,y]],seen=new Set();while(stack.length){const [a,b]=stack.pop(),k=b*s.width+a;if(a<0||b<0||a>=s.width||b>=s.height||seen.has(k)||s.pixels[k]!==old)continue;seen.add(k);s.pixels[k]=next;stack.push([a+1,b],[a-1,b],[a,b+1],[a,b-1])}renderAll();return}if(s.pixels[i]===(state.tool==='eraser'?null:state.color))return;snap();s.pixels[i]=state.tool==='eraser'?null:state.color;renderCanvas();renderAssets()}
 let painting=false,paintKey='';$('spriteCanvas').addEventListener('pointerdown',e=>{if(!active())return;const p=canvasPos(e);if(state.tool==='picker'||state.tool==='fill'){applyPixel(p.x,p.y);return}painting=true;paintKey='';$('spriteCanvas').setPointerCapture(e.pointerId);snap();applyPixelNoSnap(p.x,p.y);});$('spriteCanvas').addEventListener('pointermove',e=>{if(!painting)return;const p=canvasPos(e);applyPixelNoSnap(p.x,p.y)});window.addEventListener('pointerup',()=>{if(painting){painting=false;renderAll()}});
@@ -72,6 +103,8 @@ const keyboardButtonMap={ArrowLeft:'C',ArrowRight:'A',Enter:'B',Escape:'C'};
   if(button)reportDeviceInput('Keyboard released '+button+' button',{type:'button',button,pressed:false,source:'keyboard'});
  });
  $('previewBg').oninput=renderPreview;$('previewScale').oninput=renderPreview;$('previewChecker').onchange=renderPreview;$('downloadPreviewBtn').onclick=()=>{const c=$('previewCanvas');c.toBlob(blob=>exportBlob(blob,'paradise-preview.png'))};$('emulatorLoadFirmwareBtn').onclick=()=>$('firmwareInput').click();
+restoreWorkspace();
+if(state.sprites.length){$('colorPicker').value=state.color;$('gridToggle').checked=state.grid;$('zoomSlider').value=String(state.zoom);$('zoomValue').textContent=state.zoom+'×';}
 renderAll();
 
 /* Experimental raw bitmap candidate scanner. Results are guesses, not decoded firmware assets. */
