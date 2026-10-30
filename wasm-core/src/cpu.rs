@@ -663,12 +663,22 @@ mod tests {
         m.pram[0..4].copy_from_slice(&[0x30,0xBF,0x2A,0x20]); // WFI; MOVS r0, #42
         m.pram[0x100..0x102].copy_from_slice(&0xBF00u16.to_le_bytes());
         for (i,b) in 0x101u32.to_le_bytes().iter().enumerate() { m.write_u8(15*4+i as u32,*b); }
-        m.systick_ctrl=3; // ENABLE | TICKINT
-        m.systick_reload=1;
-        m.systick_current=1;
         let mut c=ThumbCpu::new();
         c.r[13]=crate::memory::SRAM_BASE+0x100;
         c.r[15]=0;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[15],2);
+        assert!(c.sleeping);
+        assert_eq!(c.instructions,1);
+        // A second step remains asleep and does not execute the following MOVS.
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[15],2);
+        assert_eq!(c.r[0],0);
+        assert_eq!(c.instructions,1);
+
+        m.systick_ctrl=3; // ENABLE | TICKINT
+        m.systick_reload=1;
+        m.systick_current=1;
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[15],0x100);
         assert!(c.in_irq);
