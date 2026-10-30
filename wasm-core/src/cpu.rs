@@ -45,11 +45,10 @@ impl ThumbCpu {
         if (op1 & 0xFBF0)==0xF200 || (op1 & 0xFBF0)==0xF2A0 {
             let rn=(op1&15) as usize;
             let rd=((op2>>8)&15) as usize;
-            let imm=(((op1&15) as u32)<<12)
-                | (((op1>>10&1) as u32)<<11)
+            let imm=(((op1>>10&1) as u32)<<11)
                 | (((op2>>12&7) as u32)<<8)
                 | (op2&0xff) as u32;
-            // The ADDW/SUBW immediate is split across i/imm3/imm8; Rn is in op1's low nibble.
+            // ADDW/SUBW use i:imm3:imm8; Rn occupies the low nibble of op1.
             let value=if (op1&0xFBF0)==0xF200 {self.r[rn].wrapping_add(imm)} else {self.r[rn].wrapping_sub(imm)};
             self.r[rd]=value;
             self.instructions=self.instructions.wrapping_add(1); return Ok(());
