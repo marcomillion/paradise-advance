@@ -1,29 +1,32 @@
-PARADISE WASM CORE — PORT IN PROGRESS
+PARADISE WASM CORE — REAL FIRMWARE EMULATOR PORT IN PROGRESS
 
-This is a portable Rust foundation for the real firmware emulator. It is NOT yet a bootable emulator.
+This is an incremental Rust port toward executing the actual Tamagotchi Paradise firmware. It is not yet a complete or reliably bootable SNC73410 emulator.
 
 Implemented and covered by CI:
-- RGB565 display controller model and wasm-bindgen RGBA framebuffer.
+- 128x128 RGB565 display component and wasm-bindgen RGBA framebuffer.
 - Sonix load-table parser for supported SNC73xx table versions.
-- 16 MiB firmware metadata inspection exposed to browser bindings.
-- AES-128/AES-256 primitive port from infinition/capybara (GPL-3.0-only).
-- Sonix encrypted-region decryption when the user supplies a 32-bit device key; operates on an in-memory copy and never writes firmware to the repository.
-- SNC73410 memory region definitions and byte-addressable PRAM, boot ROM, SRAM, mailbox and flash storage.
-- wasm-bindgen access to the memory model.
-- Unit tests for display conversion, memory mapping, reset-vector storage, parser validation and safe unencrypted-image handling.
+- Browser-facing firmware metadata inspection.
+- AES-128/AES-256 primitives ported from infinition/capybara (GPL-3.0-only).
+- Sonix CBC/OFB encrypted-region decryption when a user supplies the 32-bit device key; decryption operates on an in-memory copy.
+- SNC73410 PRAM, boot-ROM, SRAM, mailbox and flash storage regions.
+- Incremental Thumb-1 interpreter for common 16-bit instructions (immediate operations, shifts, ALU operations, loads/stores, branches, stack and block transfers).
+- Browser bindings to load a Sonix image with a supplied key, copy its declared user-code region into PRAM, validate the reset vector, and step/run instructions.
+- Unit tests for display conversion, memory regions, Sonix table parsing, AES primitives, and selected CPU instructions.
 
-Still not implemented:
-- ARMv7-M / Thumb CPU and exception controller.
-- MMIO bus dispatch and CPU/peripheral cycle integration.
-- Real hardware boot ROM behavior and firmware initialization.
-- DMA and the complete hardware peripheral set wired to the CPU.
-- Browser input wiring, machine stepping, save states and site integration.
-- Verified boot of an encrypted Paradise dump. Decryption requires the correct device key, and successful decryption alone does not prove that the firmware boots.
+Not yet implemented / known limitations:
+- Full ARMv7-M/Thumb instruction coverage, exceptions, NVIC and accurate CPU timing.
+- Real boot ROM behavior and the chip's full memory aliases / MMIO bus dispatch.
+- Hardware peripherals wired to the CPU, including DMA/display scanout, timers, GPIO/button controls, SPI and flash controller.
+- Complete initialization behavior required by the retail firmware.
+- Browser UI integration with the WASM bindings and verified boot of the user's encrypted dump.
+- Key recovery in-browser; the current loading API requires the correct device key from the user. A wrong key should fail reset-vector validation, but this is not a substitute for complete firmware validation.
 
-Build/test:
+The current CPU is deliberately strict: unsupported instructions halt with an explicit fault instead of silently pretending to execute them. A valid load/decryption result does not mean the firmware has booted.
+
+Build and test:
   cargo test --manifest-path wasm-core/Cargo.toml
   rustup target add wasm32-unknown-unknown
   cargo build --manifest-path wasm-core/Cargo.toml --target wasm32-unknown-unknown --release
   wasm-pack build wasm-core --target web --out-dir pkg --release
 
-CI builds the native tests and WebAssembly package. The browser-facing crate is still a collection of hardware boundaries, not a substitute for the actual CPU. Firmware dumps and device keys must remain user-local.
+Firmware dumps and device keys must remain local and must not be committed to this repository.
