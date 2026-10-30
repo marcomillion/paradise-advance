@@ -36,11 +36,11 @@ pub enum CpuFault { UnsupportedInstruction(u16), InvalidExecutionAddress(u32), H
 pub struct ThumbCpu {
     pub r: [u32; 16],
     pub n: bool, pub z: bool, pub c: bool, pub v: bool,
-    pub instructions: u64, pub halted: bool, pub last_fault: Option<CpuFault>, in_irq: bool, sleeping: bool, primask: bool, itstate: u8, ipsr: u32, exclusive_address: Option<u32>,
+    pub instructions: u64, pub halted: bool, pub last_fault: Option<CpuFault>, in_irq: bool, sleeping: bool, event_register: bool, primask: bool, itstate: u8, ipsr: u32, exclusive_address: Option<u32>,
 }
 impl ThumbCpu {
     pub fn new() -> Self {
-        Self { r:[0;16], n:false,z:false,c:false,v:false,instructions:0,halted:false,last_fault:None,in_irq:false,sleeping:false,primask:false,itstate:0,ipsr:0,exclusive_address:None }
+        Self { r:[0;16], n:false,z:false,c:false,v:false,instructions:0,halted:false,last_fault:None,in_irq:false,sleeping:false,event_register:false,primask:false,itstate:0,ipsr:0,exclusive_address:None }
     }
     pub fn reset_from_vectors(&mut self, memory:&MemoryStorage, vector_base:u32) {
         self.r=[0;16]; self.r[13]=memory.read_u32(vector_base);
@@ -48,7 +48,7 @@ impl ThumbCpu {
         // Reset returns APSR and execution-control state to architectural defaults too.
         self.n=false; self.z=false; self.c=false; self.v=false;
         self.halted=false; self.last_fault=None; self.instructions=0;
-        self.in_irq=false; self.sleeping=false; self.primask=false; self.itstate=0; self.ipsr=0;
+        self.in_irq=false; self.sleeping=false; self.event_register=false; self.primask=false; self.itstate=0; self.ipsr=0;
         self.exclusive_address=None;
     }
     fn set_nz(&mut self, value:u32) { self.n=value>>31!=0; self.z=value==0; }
@@ -375,8 +375,10 @@ impl ThumbCpu {
         let rd=(op&7) as usize; let rn=((op>>3)&7) as usize; let rm=((op>>6)&7) as usize;
         match op {
             0xBF00 => {}, // NOP
-            0xBF10 | 0xBF20 | 0xBF40 | 0xBF50 => {}, // YIELD/WFE/SEV/SEVL (event state is not modeled)
+            0xBF10 => {}, // YIELD
+            0xBF20 => { if self.event_register { self.event_register=false; } else { self.sleeping=true; } }, // WFE
             0xBF30 => { self.sleeping=true; }, // WFI: stop executing until an enabled interrupt wakes the core
+            0xBF40 | 0xBF50 => { self.event_register=true; }, // SEV / SEVL
             0xBF01..=0xBFFF if (op&0x000F)!=0 && ((op>>4)&0xF)<14 => { self.itstate=(op&0x00FF) as u8; }, // IT block
             0xB662 => { self.primask=false; }, // CPSIE i
             0xB672 => { self.primask=true; },  // CPSID i
@@ -655,6 +657,23 @@ mod tests {
         assert!(!c.halted); assert_eq!(c.last_fault,None); assert_eq!(c.instructions,0);
         assert!(!c.primask); assert_eq!(c.itstate,0); assert_eq!(c.ipsr,0);
         assert_eq!(c.exclusive_address,None); assert!(!c.in_irq);
+    }
+
+    #[test]
+    fn sev_sets_event_and_wfe_consumes_it() {
+        let mut m=MemoryStorage::new();
+        m.pram[0..6].copy_from_slice(&[0x40,0xBF,0x20,0xBF,0x30,0xBF]); // SEV; WFE; WFI
+        let mut c=ThumbCpu::new();
+        c.r[15]=0;
+        assert!(c.step(&mut m).is_ok());
+        assert!(c.event_register);
+        assert!(c.step(&mut m).is_ok());
+        assert!(!c.event_register);
+        assert!(!c.sleeping);
+        assert_eq!(c.r[15],4);
+        assert!(c.step(&mut m).is_ok());
+        assert!(c.sleeping);
+        assert_eq!(c.r[15],6);
     }
 
     #[test]
