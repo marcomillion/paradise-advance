@@ -61,7 +61,7 @@ impl ThumbCpu {
         10=>self.n==self.v,11=>self.n!=self.v,12=>!self.z&&(self.n==self.v),
         13=>self.z||(self.n!=self.v),14=>true,_=>false } }
     fn step_wide(&mut self, m:&mut MemoryStorage, pc:u32, first:u16)->Result<(),CpuFault> {
-        let second=m.read_u8(pc.wrapping_add(2)) as u16 | ((m.read_u8(pc.wrapping_add(3)) as u16)<<8);
+        let second=m.read_cpu_u8(pc.wrapping_add(2)) as u16 | ((m.read_cpu_u8(pc.wrapping_add(3)) as u16)<<8);
         let op1=first; let op2=second;
         self.r[15]=pc.wrapping_add(4);
         // CLREX clears the local exclusive monitor without touching memory.
@@ -76,7 +76,7 @@ impl ThumbCpu {
             let is_tbh=op2&0x10!=0;
             let base=if rn==15 {self.r[15]}else{self.r[rn]};
             let table=base.wrapping_add(if is_tbh {self.r[rm].wrapping_mul(2)}else{self.r[rm]});
-            let offset=if is_tbh {m.read_u8(table) as u32|((m.read_u8(table+1) as u32)<<8)}else{m.read_u8(table) as u32};
+            let offset=if is_tbh {m.read_cpu_u8(table) as u32|((m.read_cpu_u8(table+1) as u32)<<8)}else{m.read_cpu_u8(table) as u32};
             self.r[15]=self.r[15].wrapping_add(offset<<1);
             self.instructions=self.instructions.wrapping_add(1);return Ok(());
         }
@@ -84,7 +84,7 @@ impl ThumbCpu {
         if (op1&0xFFF0)==0xE850 && (op2&0x0F00)==0x0F00 {
             let rn=(op1&0xF) as usize;let rt=((op2>>12)&0xF) as usize;
             let address=self.r[rn].wrapping_add(((op2&0xFF) as u32)<<2);
-            self.r[rt]=m.read_u32(address);self.exclusive_address=Some(address);
+            self.r[rt]=m.read_cpu_u32(address);self.exclusive_address=Some(address);
             self.instructions=self.instructions.wrapping_add(1);return Ok(());
         }
         if (op1&0xFFF0)==0xE840 && (op2&0x0F00)!=0x0F00 {
@@ -106,7 +106,7 @@ impl ThumbCpu {
                 let rt2=((op2>>8)&0xF) as usize;let imm=((op2&0xFF) as u32)<<2;
                 let base=self.r[rn];let offset=if u!=0 {base.wrapping_add(imm)}else{base.wrapping_sub(imm)};
                 let address=if p!=0 {offset}else{base};
-                if is_load {self.r[rt]=m.read_u32(address);self.r[rt2]=m.read_u32(address.wrapping_add(4));}
+                if is_load {self.r[rt]=m.read_cpu_u32(address);self.r[rt2]=m.read_cpu_u32(address.wrapping_add(4));}
                 else {let a=self.r[rt];let b=self.r[rt2];for i in 0..4 {m.write_u8(address+i,(a>>(i*8)) as u8);m.write_u8(address+4+i,(b>>(i*8)) as u8);}}
                 if writeback!=0 {self.r[rn]=offset;}
                 self.instructions=self.instructions.wrapping_add(1);return Ok(());
@@ -119,7 +119,7 @@ impl ThumbCpu {
             let mut address=if decrement_before {base.wrapping_sub(4*count)}else{base};
             for reg in 0..16 {
                 if list&(1<<reg)==0 {continue;}
-                if is_load {self.r[reg]=m.read_u32(address);}
+                if is_load {self.r[reg]=m.read_cpu_u32(address);}
                 else {let value=self.r[reg];for i in 0..4 {m.write_u8(address+i,(value>>(i*8)) as u8);}}
                 address=address.wrapping_add(4);
             }
@@ -337,14 +337,14 @@ impl ThumbCpu {
             let rt=((op2>>12)&15) as usize;
             let address=self.r[rn].wrapping_add((op2&0x0fff) as u32);
             match transfer {
-                0xF8D0 => { let value=m.read_u32(address); if rt==15 {self.r[15]=value&!1;} else {self.r[rt]=value;} },
+                0xF8D0 => { let value=m.read_cpu_u32(address); if rt==15 {self.r[15]=value&!1;} else {self.r[rt]=value;} },
                 0xF8C0 => { let value=self.r[rt]; for i in 0..4 {m.write_u8(address+i,(value>>(i*8)) as u8);} },
-                0xF890 => { self.r[rt]=m.read_u8(address) as u32; },
+                0xF890 => { self.r[rt]=m.read_cpu_u8(address) as u32; },
                 0xF880 => { m.write_u8(address,self.r[rt] as u8); },
-                0xF8B0 => { self.r[rt]=m.read_u8(address) as u32|((m.read_u8(address+1) as u32)<<8); },
+                0xF8B0 => { self.r[rt]=m.read_cpu_u8(address) as u32|((m.read_cpu_u8(address+1) as u32)<<8); },
                 0xF8A0 => { let value=self.r[rt];m.write_u8(address,value as u8);m.write_u8(address+1,(value>>8) as u8); },
-                0xF990 => { self.r[rt]=m.read_u8(address) as i8 as i32 as u32; },
-                0xF9B0 => { self.r[rt]=(m.read_u8(address) as u32|((m.read_u8(address+1) as u32)<<8)) as u16 as i16 as i32 as u32; },
+                0xF990 => { self.r[rt]=m.read_cpu_u8(address) as i8 as i32 as u32; },
+                0xF9B0 => { self.r[rt]=(m.read_cpu_u8(address) as u32|((m.read_cpu_u8(address+1) as u32)<<8)) as u16 as i16 as i32 as u32; },
                 _=>{}
             }
             self.instructions=self.instructions.wrapping_add(1); return Ok(());
@@ -368,7 +368,7 @@ impl ThumbCpu {
         if pc&1!=0 || (pc&1)==0 && pc==0xffff_ffff {
             self.halted=true; let f=CpuFault::InvalidExecutionAddress(pc); self.last_fault=Some(f); return Err(f);
         }
-        let op=m.read_u8(pc) as u16 | ((m.read_u8(pc.wrapping_add(1)) as u16)<<8);
+        let op=m.read_cpu_u8(pc) as u16 | ((m.read_cpu_u8(pc.wrapping_add(1)) as u16)<<8);
         if matches!(op & 0xF800, 0xE800 | 0xF000 | 0xF800) {
             return self.step_wide(m,pc,op);
         }
@@ -469,22 +469,22 @@ impl ThumbCpu {
                     0=>{let v=self.r[rd];for i in 0..4 {m.write_u8(addr+i,(v>>(i*8)) as u8);}},
                     1=>{m.write_u8(addr,self.r[rd] as u8);m.write_u8(addr+1,(self.r[rd]>>8) as u8);},
                     2=>{m.write_u8(addr,self.r[rd] as u8);},
-                    3=>{self.r[rd]=m.read_u8(addr) as i8 as i32 as u32;},
-                    4=>{self.r[rd]=m.read_u32(addr);},
-                    5=>{self.r[rd]=m.read_u8(addr) as u32 | ((m.read_u8(addr+1) as u32)<<8);},
-                    6=>{self.r[rd]=m.read_u8(addr) as u32;},
-                    7=>{self.r[rd]=(m.read_u8(addr) as u32|((m.read_u8(addr+1) as u32)<<8)) as u16 as i16 as i32 as u32;},
+                    3=>{self.r[rd]=m.read_cpu_u8(addr) as i8 as i32 as u32;},
+                    4=>{self.r[rd]=m.read_cpu_u32(addr);},
+                    5=>{self.r[rd]=m.read_cpu_u8(addr) as u32 | ((m.read_cpu_u8(addr+1) as u32)<<8);},
+                    6=>{self.r[rd]=m.read_cpu_u8(addr) as u32;},
+                    7=>{self.r[rd]=(m.read_cpu_u8(addr) as u32|((m.read_cpu_u8(addr+1) as u32)<<8)) as u16 as i16 as i32 as u32;},
                     _=>{}
                 }
             },
-            0x4800..=0x4FFF => { let d=((op>>8)&7) as usize; let addr=((pc.wrapping_add(4))&!3).wrapping_add(((op&0xff) as u32)*4); self.r[d]=m.read_u32(addr); },
+            0x4800..=0x4FFF => { let d=((op>>8)&7) as usize; let addr=((pc.wrapping_add(4))&!3).wrapping_add(((op&0xff) as u32)*4); self.r[d]=m.read_cpu_u32(addr); },
             0x6000..=0x67FF => { let addr=self.r[rn].wrapping_add(((op>>6&31) as u32)*4); m.write_u8(addr,self.r[rd] as u8); m.write_u8(addr+1,(self.r[rd]>>8) as u8); m.write_u8(addr+2,(self.r[rd]>>16) as u8); m.write_u8(addr+3,(self.r[rd]>>24) as u8); },
-            0x6800..=0x6FFF => { let addr=self.r[rn].wrapping_add(((op>>6&31) as u32)*4); self.r[rd]=m.read_u32(addr); },
+            0x6800..=0x6FFF => { let addr=self.r[rn].wrapping_add(((op>>6&31) as u32)*4); self.r[rd]=m.read_cpu_u32(addr); },
             0x7000..=0x77FF => { let addr=self.r[rn].wrapping_add(((op>>6&31) as u32)); m.write_u8(addr,self.r[rd] as u8); },
-            0x7800..=0x7FFF => { let addr=self.r[rn].wrapping_add(((op>>6&31) as u32)); self.r[rd]=m.read_u8(addr) as u32; },
+            0x7800..=0x7FFF => { let addr=self.r[rn].wrapping_add(((op>>6&31) as u32)); self.r[rd]=m.read_cpu_u8(addr) as u32; },
             0x8000..=0x8FFF => {
                 let addr=self.r[rn].wrapping_add(((op>>6&31) as u32)*2);
-                if op&0x0800!=0 {self.r[rd]=m.read_u8(addr) as u32|((m.read_u8(addr+1) as u32)<<8);}
+                if op&0x0800!=0 {self.r[rd]=m.read_cpu_u8(addr) as u32|((m.read_cpu_u8(addr+1) as u32)<<8);}
                 else {let v=self.r[rd];m.write_u8(addr,v as u8);m.write_u8(addr+1,(v>>8) as u8);}
             },
             0xB400..=0xB5FF => {
@@ -494,15 +494,15 @@ impl ThumbCpu {
             },
             0xBC00..=0xBDFF => {
                 let extra=op&0x0100!=0;let list=op&0xff;
-                for reg in 0..8 {if list&(1<<reg)!=0 {self.r[reg]=m.read_u32(self.r[13]);self.r[13]=self.r[13].wrapping_add(4);}}
-                if extra {let target=m.read_u32(self.r[13]);self.r[13]=self.r[13].wrapping_add(4);self.r[15]=target&!1;}
+                for reg in 0..8 {if list&(1<<reg)!=0 {self.r[reg]=m.read_cpu_u32(self.r[13]);self.r[13]=self.r[13].wrapping_add(4);}}
+                if extra {let target=m.read_cpu_u32(self.r[13]);self.r[13]=self.r[13].wrapping_add(4);self.r[15]=target&!1;}
             },
             0xC000..=0xCFFF => {
                 let load=op&0x0800!=0;let base=((op>>8)&7) as usize;let list=op&0xff;let mut addr=self.r[base];
-                for reg in 0..8 {if list&(1<<reg)!=0 {if load {self.r[reg]=m.read_u32(addr);}else{let v=self.r[reg];for i in 0..4 {m.write_u8(addr+i,(v>>(i*8)) as u8);}}addr=addr.wrapping_add(4);}}
+                for reg in 0..8 {if list&(1<<reg)!=0 {if load {self.r[reg]=m.read_cpu_u32(addr);}else{let v=self.r[reg];for i in 0..4 {m.write_u8(addr+i,(v>>(i*8)) as u8);}}addr=addr.wrapping_add(4);}}
                 if list!=0 {self.r[base]=addr;}
             },
-            0x9000..=0x9FFF => { let d=((op>>8)&7) as usize; let addr=self.r[13].wrapping_add(((op&0xff) as u32)*4); if op&0x0800!=0 {self.r[d]=m.read_u32(addr);} else {let v=self.r[d];for i in 0..4 {m.write_u8(addr+i,(v>>(i*8)) as u8);}} },
+            0x9000..=0x9FFF => { let d=((op>>8)&7) as usize; let addr=self.r[13].wrapping_add(((op&0xff) as u32)*4); if op&0x0800!=0 {self.r[d]=m.read_cpu_u32(addr);} else {let v=self.r[d];for i in 0..4 {m.write_u8(addr+i,(v>>(i*8)) as u8);}} },
             0xA000..=0xAFFF => { let d=((op>>8)&7) as usize; self.r[d]=((pc.wrapping_add(4))&!3).wrapping_add(((op&0xff) as u32)*4); },
             0xB100..=0xBFFF if (op&0xF500)==0xB100 => {
                 // CBZ/CBNZ: forward-only branch based on a low register.
@@ -562,7 +562,7 @@ impl ThumbCpu {
         }
         self.r[13]=sp;
         self.r[14]=0xFFFF_FFF9;
-        self.r[15]=m.read_u32(exception_number.wrapping_mul(4))&!1;
+        self.r[15]=m.read_cpu_u32(exception_number.wrapping_mul(4))&!1;
         self.ipsr=exception_number;self.in_irq=true;
     }
     fn service_pending_interrupt(&mut self,m:&mut MemoryStorage) {
@@ -587,7 +587,7 @@ impl ThumbCpu {
     }
     fn exception_return(&mut self,m:&MemoryStorage) {
         let mut sp=self.r[13];
-        let mut pop=|| { let value=m.read_u32(sp); sp=sp.wrapping_add(4); value };
+        let mut pop=|| { let value=m.read_cpu_u32(sp); sp=sp.wrapping_add(4); value };
         self.r[0]=pop(); self.r[1]=pop(); self.r[2]=pop(); self.r[3]=pop();
         self.r[12]=pop(); self.r[14]=pop();
         let pc=pop(); let xpsr=pop();
@@ -609,7 +609,7 @@ impl ThumbCpu {
         let in_it=self.itstate!=0;
         if in_it {
             let pc=self.r[15];
-            let op=m.read_u8(pc) as u16|((m.read_u8(pc.wrapping_add(1)) as u16)<<8);
+            let op=m.read_cpu_u8(pc) as u16|((m.read_cpu_u8(pc.wrapping_add(1)) as u16)<<8);
             let wide=matches!(op&0xF800,0xE800|0xF000|0xF800);
             if !self.condition((self.itstate>>4) as u16) {
                 self.r[15]=pc.wrapping_add(if wide {4}else{2});
@@ -685,7 +685,7 @@ mod tests {
         assert_eq!(c.r[15],0x100);
         assert!(c.in_irq);
         assert_eq!(c.ipsr,15);
-        assert_eq!(m.read_u32(c.r[13]+24),6);
+        assert_eq!(m.read_cpu_u32(c.r[13]+24),6);
         assert!(!m.systick_pending);
     }
 
@@ -733,7 +733,7 @@ mod tests {
         assert!(c.in_irq);
         assert!(!c.sleeping);
         assert_eq!(c.r[0],0);
-        assert_eq!(m.read_u32(c.r[13]+24),2); // stacked PC resumes after WFI
+        assert_eq!(m.read_cpu_u32(c.r[13]+24),2); // stacked PC resumes after WFI
     }
 
     #[test]
@@ -752,11 +752,11 @@ mod tests {
         assert_eq!(c.r[15],0x100);
         assert_eq!(c.r[14],0xFFFF_FFF9);
         assert_eq!(c.r[13],initial_sp-32);
-        assert_eq!(m.read_u32(initial_sp-32),0x1111_1111);
-        assert_eq!(m.read_u32(initial_sp-28),0x2222_2222);
-        assert_eq!(m.read_u32(initial_sp-12),0x0000_0081);
-        assert_eq!(m.read_u32(initial_sp-8),2);
-        assert_eq!(m.read_u32(initial_sp-4)&0xF000_0000,0xA000_0000);
+        assert_eq!(m.read_cpu_u32(initial_sp-32),0x1111_1111);
+        assert_eq!(m.read_cpu_u32(initial_sp-28),0x2222_2222);
+        assert_eq!(m.read_cpu_u32(initial_sp-12),0x0000_0081);
+        assert_eq!(m.read_cpu_u32(initial_sp-8),2);
+        assert_eq!(m.read_cpu_u32(initial_sp-4)&0xF000_0000,0xA000_0000);
         assert_eq!(c.ipsr,11);
         assert!(c.in_irq);
 
@@ -786,9 +786,9 @@ mod tests {
         c.r[13]=initial_sp; c.r[0]=0x1122_3344; c.r[2]=0x5566_7788; c.r[14]=0x101;
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[13],initial_sp-12);
-        assert_eq!(m.read_u32(initial_sp-12),0x1122_3344);
-        assert_eq!(m.read_u32(initial_sp-8),0x5566_7788);
-        assert_eq!(m.read_u32(initial_sp-4),0x101);
+        assert_eq!(m.read_cpu_u32(initial_sp-12),0x1122_3344);
+        assert_eq!(m.read_cpu_u32(initial_sp-8),0x5566_7788);
+        assert_eq!(m.read_cpu_u32(initial_sp-4),0x101);
         c.r[0]=0; c.r[2]=0; c.r[15]=2;
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[0],0x1122_3344);
@@ -1068,7 +1068,7 @@ mod tests {
         m.write_u8(4,0xB3);m.write_u8(5,0xE8);m.write_u8(6,0x30);m.write_u8(7,0x00);
         let mut c=ThumbCpu::new();c.r[15]=0;c.r[0]=0x100;c.r[1]=0x1111;c.r[2]=0x2222;c.r[3]=0x100;
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[0],0x108);
-        assert_eq!(m.read_u32(0x100),0x1111);assert_eq!(m.read_u32(0x104),0x2222);
+        assert_eq!(m.read_cpu_u32(0x100),0x1111);assert_eq!(m.read_cpu_u32(0x104),0x2222);
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[3],0x108);
         assert_eq!(c.r[4],0x1111);assert_eq!(c.r[5],0x2222);
     }
@@ -1082,7 +1082,7 @@ mod tests {
         m.write_u8(0x100,0x78);m.write_u8(0x101,0x56);m.write_u8(0x102,0x34);m.write_u8(0x103,0x12);
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[0],0x1234_5678);
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[2],0);
-        assert_eq!(m.read_u32(0x100),0xABCD_1234);
+        assert_eq!(m.read_cpu_u32(0x100),0xABCD_1234);
     }
     #[test]
     fn clrex_clears_exclusive_reservation_before_strex() {
@@ -1099,7 +1099,7 @@ mod tests {
         assert!(c.step(&mut m).is_ok());
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[2],1);
-        assert_eq!(m.read_u32(0x100),0x1234_5678);
+        assert_eq!(m.read_cpu_u32(0x100),0x1234_5678);
     }
 
     #[test]

@@ -110,6 +110,23 @@ impl MemoryStorage {
         };
         slice.get(offset).copied().unwrap_or(0)
     }
+    /// CPU-originated byte read with the architectural SysTick COUNTFLAG side effect.
+    /// Debugger/UI peeks should keep using read_u8 so inspection does not mutate device state.
+    pub fn read_cpu_u8(&mut self, address: u32) -> u8 {
+        let value = self.read_u8(address);
+        if (0xE000_E010..0xE000_E014).contains(&address) {
+            self.systick_ctrl &= !(1 << 16);
+        }
+        value
+    }
+    /// CPU-originated word read. Capture the register value before clearing COUNTFLAG.
+    pub fn read_cpu_u32(&mut self, address: u32) -> u32 {
+        let value = self.read_u32(address);
+        if address == 0xE000_E010 {
+            self.systick_ctrl &= !(1 << 16);
+        }
+        value
+    }
     pub fn read_u32(&self, address: u32) -> u32 {
         u32::from_le_bytes([self.read_u8(address),self.read_u8(address.wrapping_add(1)),
             self.read_u8(address.wrapping_add(2)),self.read_u8(address.wrapping_add(3))])
@@ -220,6 +237,21 @@ mod tests {
         assert!(m.systick_pending);
         assert_eq!(m.systick_current,0);
         assert_ne!(m.read_u32(0xE000_E010)&(1<<16),0);
+    }
+    #[test]
+    fn systick_countflag_clears_only_after_cpu_reads_control_register() {
+        let mut m=MemoryStorage::new();
+        m.systick_ctrl=(1<<16)|3;
+        // Debugger-style reads are observational and leave the flag untouched.
+        assert_ne!(m.read_u32(0xE000_E010)&(1<<16),0);
+        assert_ne!(m.systick_ctrl&(1<<16),0);
+        // A CPU word read returns the set flag, then clears it in device state.
+        assert_ne!(m.read_cpu_u32(0xE000_E010)&(1<<16),0);
+        assert_eq!(m.systick_ctrl&(1<<16),0);
+
+        m.systick_ctrl|=1<<16;
+        assert_ne!(m.read_cpu_u8(0xE000_E010)&1,0);
+        assert_eq!(m.systick_ctrl&(1<<16),0);
     }
     #[test]
     fn gpio_buttons_are_active_low_and_dial_is_readable() {
