@@ -237,7 +237,7 @@ impl ThumbCpu {
         self.instructions=self.instructions.wrapping_add(1); Ok(())
     }
     fn service_dma_irq(&mut self, m:&mut MemoryStorage) {
-        if !m.dma_irq_pending || self.in_irq { return; }
+        if !m.dma_irq_pending || !m.dma_irq_enabled() || self.in_irq { return; }
         m.dma_irq_pending=false;
         let mut sp=self.r[13];
         let xpsr=((self.n as u32)<<31)|((self.z as u32)<<30)|((self.c as u32)<<29)|((self.v as u32)<<28)|(1<<24);
@@ -340,7 +340,7 @@ mod tests {
         m.pram[0x128..0x12C].copy_from_slice(&0x1000_0101u32.to_le_bytes());
         m.flash[0x100..0x102].copy_from_slice(&0x4770u16.to_le_bytes()); // BX LR
         let mut c=ThumbCpu::new(); c.r[13]=crate::memory::SRAM_BASE+crate::memory::SRAM_SIZE as u32;
-        c.r[15]=0; m.dma_irq_pending=true;
+        c.r[15]=0; m.write_u8(0xE000_E107,0x04); m.dma_irq_pending=true;
         assert!(c.step(&mut m).is_ok());
         assert!(c.in_irq); assert_eq!(c.r[15],0x1000_0100);
         assert_eq!(c.r[13],crate::memory::SRAM_BASE+crate::memory::SRAM_SIZE as u32-32);
