@@ -392,7 +392,7 @@ impl ThumbCpu {
             },
             0x1800..=0x1FFF => { let imm=op&0x0400!=0;let sub=op&0x0200!=0;let a=self.r[rn];let b=if imm {(op>>6&7) as u32}else{self.r[rm]};let val=if sub {a.wrapping_sub(b)}else{a.wrapping_add(b)};self.r[rd]=val;if sub {self.set_sub_flags(a,b,val)}else{self.set_add_flags(a,b,val)}; },
             0x4000..=0x43FF => {
-                let alu=(op>>6)&15; let a=self.r[rd]; let b=self.r[rm];
+                let alu=(op>>6)&15; let a=self.r[rd]; let b=self.r[rn];
                 match alu {
                     0=>{let v=a&b;self.r[rd]=v;self.set_nz(v);},
                     1=>{let v=a^b;self.r[rd]=v;self.set_nz(v);},
