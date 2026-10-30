@@ -69,7 +69,7 @@ impl ThumbCpu {
             },
             0x4400..=0x47FF => {
                 let opkind=(op>>8)&3;
-                let rs=(((op>>3)&7)|((op>>3)&8)) as usize;
+                let rs=((op>>3)&15) as usize;
                 let rd=((op&7)|((op>>4)&8)) as usize;
                 match opkind {
                     0=>{let v=self.r[rd].wrapping_add(self.r[rs]);if rd==15 {self.r[15]=v&!1;} else {self.r[rd]=v;}},
@@ -89,7 +89,7 @@ impl ThumbCpu {
                     4=>{self.r[rd]=m.read_u32(addr);},
                     5=>{self.r[rd]=m.read_u8(addr) as u32 | ((m.read_u8(addr+1) as u32)<<8);},
                     6=>{self.r[rd]=m.read_u8(addr) as u32;},
-                    7=>{self.r[rd]=m.read_u8(addr) as i8 as i32 as u32;},
+                    7=>{self.r[rd]=(m.read_u8(addr) as u32|((m.read_u8(addr+1) as u32)<<8)) as u16 as i16 as i32 as u32;},
                     _=>{}
                 }
             },
