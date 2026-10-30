@@ -169,13 +169,13 @@ function decodeParadiseSpriteFrame(pkg, assetIndex, frameIndex, paletteSet=0) {
  if(h.flags&0x60){
   const relOffset=readU32(all,pixelBase+frameIndex*8), storedLength=readU32(all,pixelBase+frameIndex*8+4);
   const rawOffset=relOffset&0x7fffffff, absolute=pixelBase+rawOffset;
-  if(absolute<0||storedLength>pkg.length||absolute+storedLength>base+pkg.length) throw new Error('Pixel data range is invalid');
+  if(absolute<0||storedLength>pkg.length||absolute+storedLength>base+pkg.length||(h.length&&absolute+storedLength>start+h.length)) throw new Error('Pixel data range is invalid');
   let stored=all.slice(absolute,absolute+storedLength);
   if(h.flags&0x80) stored=stored.map(v=>v^0x53);
   decoded=(relOffset&0x80000000)?stored:rleDecode(stored,!!(h.flags&0x40),Math.min(expected*4+64,2*1024*1024));
  }else{
   const absolute=pixelBase+frameIndex*expected;
-  if(absolute+expected>base+pkg.length) throw new Error('Uncompressed pixel data is truncated');
+  if(absolute+expected>base+pkg.length||(h.length&&absolute+expected>start+h.length)) throw new Error('Uncompressed pixel data is truncated');
   decoded=all.slice(absolute,absolute+expected);
   if(h.flags&0x80) decoded=decoded.map(v=>v^0x53);
  }
