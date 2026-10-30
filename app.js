@@ -309,6 +309,7 @@ function exportAnimationJson() {
 }
 $('animationAddFrame').addEventListener('click',addAnimationFrame);
 $('animationUpdateFrame').addEventListener('click',updateAnimationFrame);
+$('animationDeleteFrame').addEventListener('click',()=>{if(animationState.selected<0||!animationState.frames.length)return toast('Select a frame to delete first');stopAnimation();animationState.frames.splice(animationState.selected,1);animationState.selected=animationState.frames.length?Math.min(animationState.selected,animationState.frames.length-1):-1;renderAnimationStrip();if(animationState.selected>=0){loadAnimationFrame(animationState.selected)}else{$('animationPreviewLabel').textContent='Preview idle';const ctx=$('animationPreviewCanvas').getContext('2d');ctx.clearRect(0,0,$('animationPreviewCanvas').width,$('animationPreviewCanvas').height)}toast('Animation frame deleted')});
 $('animationPrevFrame').addEventListener('click',()=>{if(!animationState.frames.length)return;stopAnimation();animationState.selected=(animationState.selected-1+animationState.frames.length)%animationState.frames.length;loadAnimationFrame(animationState.selected);renderAnimationStrip()});
 $('animationNextFrame').addEventListener('click',()=>{if(!animationState.frames.length)return;stopAnimation();animationState.selected=(animationState.selected+1)%animationState.frames.length;loadAnimationFrame(animationState.selected);renderAnimationStrip()});
 $('animationPlay').addEventListener('click',playAnimation);
