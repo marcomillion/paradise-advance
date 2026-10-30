@@ -211,4 +211,48 @@ mod browser_integration_tests {
         assert_eq!(cpu.display_height(), 128);
         assert_eq!(cpu.display_rgba_framebuffer().len(), 128 * 128 * 4);
     }
+
+    #[test]
+    fn unencrypted_sonix_image_loads_and_executes_its_user_code() {
+        let mut image = vec![0xFFu8; crate::memory::FLASH_SIZE];
+        image[..8].copy_from_slice(b"SONIXDEV");
+        // load_config bit zero is clear, so this synthetic image is unencrypted.
+        image[8..12].copy_from_slice(&0x12u32.to_le_bytes());
+        image[0x10..0x14].copy_from_slice(&0x6000_1000u32.to_le_bytes());
+        image[0x14..0x18].copy_from_slice(&0x1_0000u32.to_le_bytes());
+        image[0x1F8..0x1FC].copy_from_slice(&0x5A5A_0033u32.to_le_bytes());
+
+        let region = 0x1000usize;
+        image[region..region + 4].copy_from_slice(
+            &(crate::memory::SRAM_BASE + crate::memory::SRAM_SIZE as u32 - 16).to_le_bytes()
+        );
+        image[region + 4..region + 8].copy_from_slice(&0x0000_0101u32.to_le_bytes());
+        // Reset handler: NOP, then branch to itself.
+        image[region + 0x100..region + 0x104].copy_from_slice(&[0x00, 0xBF, 0xFE, 0xE7]);
+
+        let mut cpu = BrowserCpu::new();
+        cpu.load_sonix_firmware(&image, 0).expect("synthetic image should load");
+        assert_eq!(cpu.register(13).unwrap(), crate::memory::SRAM_BASE + crate::memory::SRAM_SIZE as u32 - 16);
+        assert_eq!(cpu.register(15).unwrap(), 0x100);
+        assert_eq!(cpu.run_steps(3), 3);
+        assert_eq!(cpu.instructions(), 3);
+        assert!(!cpu.halted());
+        assert_eq!(cpu.register(15).unwrap(), 0x102);
+    }
+
+    #[test]
+    fn rejects_sonix_image_with_reset_vector_outside_user_code() {
+        let mut image = vec![0xFFu8; crate::memory::FLASH_SIZE];
+        image[..8].copy_from_slice(b"SONIXDEV");
+        image[8..12].copy_from_slice(&0x12u32.to_le_bytes());
+        image[0x10..0x14].copy_from_slice(&0x6000_1000u32.to_le_bytes());
+        image[0x14..0x18].copy_from_slice(&0x100u32.to_le_bytes());
+        image[0x1F8..0x1FC].copy_from_slice(&0x5A5A_0033u32.to_le_bytes());
+        image[0x1000..0x1004].copy_from_slice(&0x1801_FFF0u32.to_le_bytes());
+        image[0x1004..0x1008].copy_from_slice(&0x0000_0201u32.to_le_bytes());
+
+        let mut cpu = BrowserCpu::new();
+        let error = cpu.load_sonix_firmware(&image, 0).unwrap_err().as_string().unwrap();
+        assert!(error.contains("outside the loaded user-code region"));
+    }
 }
