@@ -45,3 +45,49 @@
 .dial-mark{position:absolute;top:3px;left:calc(50% - 2px);width:4px;height:10px;border-radius:3px;background:#ff9fc8}
 .device-input-status{margin-top:14px;text-align:center;color:var(--muted);font:10px/1.6 "DM Mono",monospace;max-width:480px}
 @media(max-width:700px){.device-shell{margin-right:22px}.zoom-dial-wrap{right:-32px}.zoom-dial{width:54px;height:54px}}
+
+/* Blue egg-shaped Paradise shell; the dial protrudes from the upper-right edge. */
+.device-shell{
+ background:linear-gradient(150deg,#c7f1ff 0%,#62b9f0 35%,#2479ce 78%,#1955a4 100%);
+ border:4px solid #d9f5ff;
+ border-radius:48% 48% 45% 45% / 38% 38% 58% 58%;
+ padding:48px 24px 28px;
+ width:min(390px,100%);
+ min-height:445px;
+ margin-right:35px;
+ box-shadow:inset -12px -16px 0 #1458a833,inset 8px 10px 0 #ffffff5c,0 18px 0 #174d8b,0 28px 45px #0007;
+}
+.device-screen{
+ border:7px solid #1e5a9e;
+ border-radius:13px;
+ background:#dff8ff;
+ box-shadow:inset 0 0 0 2px #93d7f4,0 4px 0 #ffffff66;
+}
+.device-controls{margin-top:22px;gap:25px}
+.device-button{
+ background:linear-gradient(145deg,#f7fdff,#a8dcf5);
+ border:2px solid #eafaff;
+ color:#14518d;
+ box-shadow:0 5px 0 #174c8c,0 7px 10px #103a7055;
+}
+.device-button:active,.device-button.pressed{box-shadow:0 1px 0 #174c8c}
+.zoom-dial-wrap{
+ right:-31px;
+ top:34px;
+ color:#174f8c;
+ z-index:2;
+}
+.zoom-dial{
+ width:76px;height:76px;
+ border:5px solid #e4f8ff;
+ background:repeating-conic-gradient(from 0deg,#1d65ad 0deg 8deg,#4c9bda 8deg 16deg);
+ box-shadow:0 6px 0 #154b88,0 8px 12px #0004,inset 0 0 0 6px #9bd8f6;
+}
+.zoom-dial span{background:#154f91;color:#fff}
+.dial-mark{background:#ff9fc8}
+.device-caption{margin-top:42px}
+@media(max-width:700px){
+ .device-shell{margin-right:25px;min-height:410px;padding:42px 18px 25px}
+ .zoom-dial-wrap{right:-27px;top:30px}
+ .zoom-dial{width:64px;height:64px}
+}
