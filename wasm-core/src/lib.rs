@@ -301,9 +301,9 @@ mod browser_integration_tests {
         image[0x10..0x14].copy_from_slice(&0x6000_1000u32.to_le_bytes());
         image[0x14..0x18].copy_from_slice(&0x100u32.to_le_bytes());
         image[0x1F8..0x1FC].copy_from_slice(&0x5A5A_0033u32.to_le_bytes());
-        // Invalid, misaligned stack pointer should reject the image before any state is changed.
+        // Keep the reset vector valid so the misaligned stack pointer is the failing condition.
         image[0x1000..0x1004].copy_from_slice(&0x1800_0002u32.to_le_bytes());
-        image[0x1004..0x1008].copy_from_slice(&0x0000_0101u32.to_le_bytes());
+        image[0x1004..0x1008].copy_from_slice(&0x0000_0081u32.to_le_bytes());
 
         let error = load_sonix_firmware_inner(&mut cpu, &image, 0).unwrap_err();
         assert!(error.contains("Initial stack pointer"));
