@@ -33,6 +33,39 @@ impl ThumbCpu {
         let second=m.read_u8(pc.wrapping_add(2)) as u16 | ((m.read_u8(pc.wrapping_add(3)) as u16)<<8);
         let op1=first; let op2=second;
         self.r[15]=pc.wrapping_add(4);
+        // B.W unconditional: reconstruct the signed 25-bit PC-relative offset.
+        if (op1&0xF800)==0xF000 && (op2&0xD000)==0x9000 {
+            let sign=((op1>>10)&1) as u32;
+            let imm10=(op1&0x03FF) as u32;
+            let j1=((op2>>13)&1) as u32;
+            let j2=((op2>>11)&1) as u32;
+            let imm11=(op2&0x07FF) as u32;
+            let i1=(!(j1^sign))&1; let i2=(!(j2^sign))&1;
+            let mut imm25=(sign<<24)|(i1<<23)|(i2<<22)|(imm10<<12)|(imm11<<1);
+            if imm25&(1<<24)!=0 { imm25|=0xFE00_0000; }
+            self.r[15]=self.r[15].wrapping_add(imm25);
+            self.instructions=self.instructions.wrapping_add(1); return Ok(());
+        }
+        // B<cond>.W conditional long branch.
+        if (op1&0xF800)==0xF000 && (op2&0xD000)==0x8000 {
+            let cond=(op1>>6)&0xF;
+            if cond<14 && self.condition(cond) {
+                let sign=((op1>>10)&1) as u32;
+                let imm6=(op1&0x3F) as u32;
+                let j1=((op2>>13)&1) as u32;
+                let j2=((op2>>11)&1) as u32;
+                let imm11=(op2&0x07FF) as u32;
+                let mut imm21=(sign<<20)|(j2<<19)|(j1<<18)|(imm6<<12)|(imm11<<1);
+                if imm21&(1<<20)!=0 { imm21|=0xFFE0_0000; }
+                self.r[15]=self.r[15].wrapping_add(imm21);
+            }
+            self.instructions=self.instructions.wrapping_add(1); return Ok(());
+        }
+        // Barriers and hints have no additional effect in this uncached model.
+        if (op1==0xF3BF && (op2&0xFF00)==0x8F00)
+            || (op1==0xF3AF && (op2&0xFF00)==0x8000) {
+            self.instructions=self.instructions.wrapping_add(1); return Ok(());
+        }
         if (op1 & 0xFBF0)==0xF240 || (op1 & 0xFBF0)==0xF2C0 {
             let rd=((op2>>8)&15) as usize;
             let imm=(((op1&15) as u32)<<12)
@@ -475,6 +508,16 @@ mod tests {
         let mut c=ThumbCpu::new(); c.r[15]=0; c.r[1]=0x1000;
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[0],0x1234); assert_eq!(c.r[15],4);
+    }
+    #[test]
+    fn executes_thumb2_b_w_and_barrier_hints() {
+        let mut m=MemoryStorage::new();
+        // B.W +0 then DMB (barrier hint).
+        m.write_u8(0,0x00); m.write_u8(1,0xF0); m.write_u8(2,0x00); m.write_u8(3,0xB8);
+        m.write_u8(4,0xBF); m.write_u8(5,0xF3); m.write_u8(6,0x5F); m.write_u8(7,0x8F);
+        let mut c=ThumbCpu::new(); c.r[15]=0;
+        assert!(c.step(&mut m).is_ok()); assert_eq!(c.r[15],4);
+        assert!(c.step(&mut m).is_ok()); assert_eq!(c.r[15],8);
     }
     #[test]
     fn executes_thumb2_signed_byte_and_halfword_loads() {
