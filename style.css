@@ -807,5 +807,67 @@ h3 {
     }
 }
 
+/* PIXEL LAB ZOOM CONTROLS */
 
+.zoom-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 9px;
+    margin-bottom: 14px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #191b22;
+}
+
+.zoom-controls button {
+    min-width: 35px;
+    height: 32px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--text);
+}
+
+.zoom-controls button:hover {
+    background: var(--panel-hover);
+}
+
+.zoom-controls input[type="range"] {
+    flex: 1;
+    min-width: 80px;
+    accent-color: var(--accent);
+}
+
+.zoom-label {
+    min-width: 48px;
+    color: var(--accent);
+    font-size: 12px;
+    text-align: center;
+}
+
+/* Exact pixel and brush-size preview */
+
+.pixel-cursor-preview {
+    position: absolute;
+    z-index: 2;
+    display: none;
+    pointer-events: none;
+    border: 1px solid #ffffff;
+    outline: 1px solid #17191f;
+    background: rgba(139, 156, 255, 0.3);
+    box-sizing: border-box;
+}
+
+.canvas-stage {
+    overflow: auto;
+}
+
+@media (max-width: 700px) {
+    #pixel-canvas {
+        max-width: none;
+        max-height: none;
+    }
+}
 
