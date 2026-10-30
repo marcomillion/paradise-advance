@@ -49,3 +49,26 @@ impl BrowserFirmwareInfo {
     pub fn user_address(&self) -> u32 { self.user_address }
     pub fn user_length(&self) -> u32 { self.user_length }
 }
+
+/// Exposes the real chip memory regions for incremental CPU/bus integration.
+/// It does not execute instructions or dispatch MMIO yet.
+#[wasm_bindgen]
+pub struct BrowserMemory {
+    memory: MemoryStorage,
+}
+#[wasm_bindgen]
+impl BrowserMemory {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> BrowserMemory { BrowserMemory { memory: MemoryStorage::new() } }
+    pub fn load_flash(&mut self, bytes: &[u8]) -> Result<(), JsValue> {
+        self.memory.load_flash(bytes).map_err(JsValue::from_str)
+    }
+    pub fn read_u8(&self, address: u32) -> u32 { self.memory.read_u8(address) as u32 }
+    pub fn read_u32(&self, address: u32) -> u32 { self.memory.read_u32(address) }
+    pub fn write_u8(&mut self, address: u32, value: u32) -> bool {
+        self.memory.write_u8(address, value as u8)
+    }
+    pub fn reset_vector_sp(&self) -> u32 { self.memory.read_u32(0x0800_0000) }
+    pub fn reset_vector_pc(&self) -> u32 { self.memory.read_u32(0x0800_0004) }
+}
+impl Default for BrowserMemory { fn default() -> Self { Self::new() } }
