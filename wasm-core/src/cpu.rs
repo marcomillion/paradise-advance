@@ -103,16 +103,17 @@ impl ThumbCpu {
             0x2800..=0x2FFF => { let val=self.r[((op>>8)&7) as usize].wrapping_sub((op&0xff) as u32); self.set_nz(val); self.c=self.r[((op>>8)&7) as usize]>=(op&0xff) as u32; },
             0x3000..=0x37FF => { let d=((op>>8)&7) as usize; let (val,carry)=self.r[d].overflowing_add((op&0xff) as u32); self.r[d]=val; self.set_nz(val); self.c=carry; },
             0x3800..=0x3FFF => { let d=((op>>8)&7) as usize; let (val,borrow)=self.r[d].overflowing_sub((op&0xff) as u32); self.r[d]=val; self.set_nz(val); self.c=!borrow; },
-            0x0000..=0x07FF => { let shift=((op>>6)&31) as u32; let val=self.r[rm]<<shift; self.r[rd]=val; self.set_nz(val); self.c=if shift==0 {self.c} else {(self.r[rm]>>(32-shift))&1!=0}; },
-            0x0800..=0x0FFF => { let shift=((op>>6)&31) as u32; let val=if shift==0 {0} else {self.r[rm]>>shift}; self.r[rd]=val; self.set_nz(val); self.c=if shift==0 {self.r[rm]>>31!=0} else {(self.r[rm]>>(shift-1))&1!=0}; },
+            0x0000..=0x07FF => { let source=((op>>3)&7) as usize; let shift=((op>>6)&31) as u32; let val=self.r[source]<<shift; self.r[rd]=val; self.set_nz(val); self.c=if shift==0 {self.c} else {(self.r[source]>>(32-shift))&1!=0}; },
+            0x0800..=0x0FFF => { let source=((op>>3)&7) as usize; let shift=((op>>6)&31) as u32; let val=if shift==0 {0} else {self.r[source]>>shift}; self.r[rd]=val; self.set_nz(val); self.c=if shift==0 {self.r[source]>>31!=0} else {(self.r[source]>>(shift-1))&1!=0}; },
             0x1000..=0x17FF => {
                 // ASR (immediate); an encoded shift of zero means shift by 32.
                 let shift=((op>>6)&31) as u32;
                 let amount=if shift==0 {32} else {shift};
-                let source=self.r[rm] as i32;
+                let source_reg=((op>>3)&7) as usize;
+                let source=self.r[source_reg] as i32;
                 let value=(source >> amount) as u32;
                 self.r[rd]=value; self.set_nz(value);
-                self.c=if amount==32 {source<0} else {((self.r[rm]>>(amount-1))&1)!=0};
+                self.c=if amount==32 {source<0} else {((self.r[source_reg]>>(amount-1))&1)!=0};
             },
             0x1800..=0x1FFF => { let imm=op&0x0400!=0; let sub=op&0x0200!=0; let a=self.r[rn]; let b=if imm {(op>>6&7) as u32} else {self.r[rm]}; let (val,carry)=if sub {a.overflowing_sub(b)} else {a.overflowing_add(b)}; self.r[rd]=val; self.set_nz(val); self.c=if sub {!carry} else {carry}; },
             0x4000..=0x43FF => {
