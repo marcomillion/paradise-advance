@@ -155,7 +155,7 @@
   $('emulatorRunBtn')?.addEventListener('click', async () => {
     if (!cpuLoaded) return;
     try {
-      const r = await request('run', { count: 1000 });
+      const r = await request('run', { count: Number($('emulatorRunCount')?.value || 1000) });
       await refreshFirmwareFrame();
       setStatus('CPU run batch finished', 'Executed ' + r.executed + ' instruction(s) · total ' + r.instructions + ' · PC ' + formatHex(r.pc) + ' · halted: ' + r.halted + (r.halted ? ' · fault: ' + r.fault : '') + '. The shown image is an SRAM snapshot, not verified LCD output.');
       if (r.halted) { $('emulatorStepBtn').disabled = true; $('emulatorRunBtn').disabled = true; }
@@ -197,6 +197,24 @@
     $('cancelDeviceKeySearchBtn').disabled=true;
     try { await request('cancel-key-search'); } catch (_) {}
   });
+  // Keyboard and pointer-drag dial events are emitted by the shared device UI.
+  // Pointer buttons and the mouse wheel are handled below to avoid duplicate edges.
+  document.addEventListener('paradise:device-input', event => {
+    const detail = event.detail || {};
+    if (!cpuLoaded) return;
+    if (detail.source === 'keyboard' && detail.type === 'button') {
+      const indexes = { A: 0, B: 1, C: 2, DIAL: 3 };
+      const index = indexes[detail.button];
+      if (index !== undefined) request('input', { button: index, pressed: Boolean(detail.pressed) }).catch(error => {
+        if (inputStatus) inputStatus.textContent = 'Keyboard input error: ' + (error.message || String(error));
+      });
+    } else if (detail.type === 'dial' && detail.source === 'pointer' && Number(detail.steps)) {
+      request('input', { dialDelta: Number(detail.steps) }).catch(error => {
+        if (inputStatus) inputStatus.textContent = 'Dial input error: ' + (error.message || String(error));
+      });
+    }
+  });
+
   document.querySelectorAll('[data-device-button]').forEach((button, index) => {
     const send = pressed => {
       if (!cpuLoaded) {
