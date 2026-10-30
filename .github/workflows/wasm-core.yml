@@ -28,6 +28,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Check browser worker JavaScript syntax
         run: node --input-type=module --check < wasm-core/browser-worker.js
+      - name: Check emulator UI JavaScript syntax
+        run: node --check emulator.js
       - name: Run portable core unit tests
         run: cargo test --manifest-path wasm-core/Cargo.toml
 
