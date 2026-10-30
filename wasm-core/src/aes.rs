@@ -185,11 +185,20 @@ impl Aes {
             if r != 1 {
                 let p = s;
                 for c in 0..4 {
-                    let col = &p[c * 4..c * 4 + 4];
-                    s[c * 4] = gmul(col[0], 14) ^ gmul(col[1], 11) ^ gmul(col[2], 13) ^ gmul(col[3], 9);
-                    s[c * 4 + 1] = gmul(col[0], 9) ^ gmul(col[1], 14) ^ gmul(col[2], 11) ^ gmul(col[3], 13);
-                    s[c * 4 + 2] = gmul(col[0], 13) ^ gmul(col[1], 9) ^ gmul(col[2], 14) ^ gmul(col[3], 11);
-                    s[c * 4 + 3] = gmul(col[0], 11) ^ gmul(col[1], 13) ^ gmul(col[2], 9) ^ gmul(col[3], 14);
+                    let i = c * 4;
+                    let a0 = p[i]; let a1 = p[i + 1]; let a2 = p[i + 2]; let a3 = p[i + 3];
+                    let a0_2 = xtime(a0); let a0_4 = xtime(a0_2); let a0_8 = xtime(a0_4);
+                    let a1_2 = xtime(a1); let a1_4 = xtime(a1_2); let a1_8 = xtime(a1_4);
+                    let a2_2 = xtime(a2); let a2_4 = xtime(a2_2); let a2_8 = xtime(a2_4);
+                    let a3_2 = xtime(a3); let a3_4 = xtime(a3_2); let a3_8 = xtime(a3_4);
+                    let a0_9 = a0_8 ^ a0; let a0_11 = a0_8 ^ a0_2 ^ a0; let a0_13 = a0_8 ^ a0_4 ^ a0; let a0_14 = a0_8 ^ a0_4 ^ a0_2;
+                    let a1_9 = a1_8 ^ a1; let a1_11 = a1_8 ^ a1_2 ^ a1; let a1_13 = a1_8 ^ a1_4 ^ a1; let a1_14 = a1_8 ^ a1_4 ^ a1_2;
+                    let a2_9 = a2_8 ^ a2; let a2_11 = a2_8 ^ a2_2 ^ a2; let a2_13 = a2_8 ^ a2_4 ^ a2; let a2_14 = a2_8 ^ a2_4 ^ a2_2;
+                    let a3_9 = a3_8 ^ a3; let a3_11 = a3_8 ^ a3_2 ^ a3; let a3_13 = a3_8 ^ a3_4 ^ a3; let a3_14 = a3_8 ^ a3_4 ^ a3_2;
+                    s[i] = a0_14 ^ a1_11 ^ a2_13 ^ a3_9;
+                    s[i + 1] = a0_9 ^ a1_14 ^ a2_11 ^ a3_13;
+                    s[i + 2] = a0_13 ^ a1_9 ^ a2_14 ^ a3_11;
+                    s[i + 3] = a0_11 ^ a1_13 ^ a2_9 ^ a3_14;
                 }
             }
         }
