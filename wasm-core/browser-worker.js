@@ -54,6 +54,13 @@ self.onmessage = async (event) => {
       self.postMessage({ id, ok: true, result: { executed, instructions: cpu.instructions(), pc: cpu.register(15), halted: cpu.halted(), fault: cpu.last_fault() }});
       return;
     }
+    if (type === "input") {
+      if (!cpu) throw new Error("CPU has not been created.");
+      if (payload.button !== undefined) cpu.set_button(Number(payload.button), Boolean(payload.pressed));
+      if (payload.dialDelta !== undefined) cpu.rotate_dial(Number(payload.dialDelta) | 0);
+      self.postMessage({ id, ok: true, result: { accepted: true }});
+      return;
+    }
     if (type === "register") {
       if (!cpu) throw new Error("CPU has not been created.");
       self.postMessage({ id, ok: true, result: { value: cpu.register(Number(payload.index)) }});
