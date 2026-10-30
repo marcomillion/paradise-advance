@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "Browser smoke tests for Paradise Mod Studio",
   "scripts": {
+    "build": "node build.js",
     "test:e2e": "playwright test"
   },
   "devDependencies": {
