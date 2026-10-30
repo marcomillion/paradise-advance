@@ -33,7 +33,7 @@ pub struct MemoryStorage {
     pub pram: Vec<u8>, pub boot_rom: Vec<u8>, pub sram: Vec<u8>,
     pub mailbox: Vec<u8>, pub flash: Vec<u8>,
     pub gpio_buttons: [bool; 3], pub dial_counter: i32,
-    pub dma_registers: [u32; 78], pub panel_frame: Option<Vec<u16>>,
+    pub dma_registers: [u32; 78], pub panel_frame: Option<Vec<u16>>, pub dma_irq_pending: bool,
 }
 impl MemoryStorage {
     pub fn new() -> Self {
@@ -44,7 +44,7 @@ impl MemoryStorage {
         Self { pram:vec![0;PRAM_SIZE], boot_rom, sram:vec![0;SRAM_SIZE],
             mailbox:vec![0;MAILBOX_SIZE], flash:vec![0xFF;FLASH_SIZE],
             gpio_buttons:[false;3], dial_counter:0,
-            dma_registers:[0;78], panel_frame:None }
+            dma_registers:[0;78], panel_frame:None, dma_irq_pending:false }
     }
     pub fn load_pram(&mut self, bytes: &[u8]) {
         self.pram.fill(0);
@@ -119,6 +119,7 @@ impl MemoryStorage {
                             pixels.push(u16::from_le_bytes([self.read_u8(addr),self.read_u8(addr.wrapping_add(1))]));
                         }
                         self.panel_frame=Some(pixels);
+                        self.dma_irq_pending=true;
                     }
                     self.dma_registers[ctrl_word]&=!1;
                     self.dma_registers[0]|=1<<channel;
