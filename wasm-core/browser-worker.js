@@ -60,7 +60,6 @@ self.onmessage = async (event) => {
       return;
     }
     if (type === "frame") {
-      if (!display) throw new Error("Display has not been created.");
       if (!cpu) throw new Error("CPU has not been created.");
       self.postMessage({ id, ok: true, result: { width: cpu.display_width(), height: cpu.display_height(), enabled: cpu.display_enabled(), rgba: cpu.display_rgba_framebuffer() }});
       return;
