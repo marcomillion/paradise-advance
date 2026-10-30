@@ -27,7 +27,7 @@ test('studio creates, renames, and restores a sprite after reload', async ({ pag
 
 test('sprite editor can paint a pixel and export a project JSON', async ({ page }) => {
   await page.locator('#newSpriteBtn').click();
-  await page.locator('#colorPicker').fill('#ff0000');
+  await page.locator('#colorPicker').evaluate(el => { el.value = '#ff0000'; el.dispatchEvent(new Event('input', { bubbles: true })); });
   await page.locator('#spriteCanvas').click({ position: { x: 5, y: 5 } });
 
   await page.waitForFunction(() => {
@@ -43,7 +43,7 @@ test('sprite editor can paint a pixel and export a project JSON', async ({ page 
 
 test('emulator status reports the browser core instead of showing a fake pet', async ({ page }) => {
   await page.locator('[data-view="emulator"]').click();
-  await expect(page.locator('#emulatorStatusTitle')).not.toHaveText('Checking browser core…', { timeout: 15_000 });
+  await expect(page.locator('#emulatorStatusTitle')).toHaveText('WASM core ready · awaiting firmware', { timeout: 15_000 });
   await expect(page.locator('#emulatorRunCount')).toBeVisible();
   await expect(page.locator('#emulatorStepBtn')).toBeDisabled();
 });
