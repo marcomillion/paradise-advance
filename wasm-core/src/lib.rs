@@ -8,7 +8,7 @@ mod sonix;
 mod memory;
 use wasm_bindgen::prelude::*;
 pub use display::{DisplayController, LCD_HEIGHT, LCD_WIDTH};
-pub use sonix::{find_tables, decrypt_dump_with_key, CipherMode, LoadTable, Region};
+pub use sonix::{find_tables, decrypt_dump_with_key, search_device_key_chunk as search_key_chunk, CipherMode, LoadTable, Region};
 pub use memory::{MemoryStorage, RegionKind};
 pub use cpu::{CpuFault, ThumbCpu};
 
@@ -75,6 +75,12 @@ impl BrowserMemory {
     pub fn reset_vector_pc(&self) -> u32 { self.memory.read_u32(0x0800_0004) }
 }
 impl Default for BrowserMemory { fn default() -> Self { Self::new() } }
+
+/// Search a bounded block of the 32-bit device-key space. Keep chunks small in browsers.
+#[wasm_bindgen]
+pub fn search_device_key_candidates(bytes:&[u8],start:u32,count:u32)->Result<Option<u32>,JsValue> {
+    search_key_chunk(bytes,start,count).map_err(JsValue::from_str)
+}
 
 /// Decrypts the firmware's encrypted regions using a user-provided 32-bit device key.
 /// The returned bytes are held in memory only; this function does not execute firmware.
