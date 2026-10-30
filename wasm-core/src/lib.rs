@@ -285,6 +285,7 @@ mod browser_integration_tests {
         image[8..12].copy_from_slice(&0x12u32.to_le_bytes());
         image[0x10..0x14].copy_from_slice(&0x6000_1000u32.to_le_bytes());
         image[0x14..0x18].copy_from_slice(&0x1_0000u32.to_le_bytes());
+        image[0x90..0xA0].fill(0); // no separate SRAM or DPD image in this fixture
         image[0x1F8..0x1FC].copy_from_slice(&0x5A5A_0033u32.to_le_bytes());
 
         let region = 0x1000usize;
