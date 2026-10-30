@@ -219,7 +219,10 @@
     let tested = 0;
     let foundKey = null;
     let failure = null;
-    const searchStartedAt = performance.now();
+    let peakRate = 0;
+    let lastSampleAt = performance.now();
+    let lastSampleTested = 0;
+    const searchStartedAt = lastSampleAt;
     const formatEta = seconds => {
       if (!Number.isFinite(seconds) || seconds < 0) return 'calculating…';
       if (seconds < 60) return Math.ceil(seconds) + 's';
@@ -227,6 +230,31 @@
       if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ' + Math.ceil((seconds % 3600) / 60) + 'm';
       return Math.floor(seconds / 86400) + 'd ' + Math.ceil((seconds % 86400) / 3600) + 'h';
     };
+    const formatDuration = seconds => {
+      if (!Number.isFinite(seconds) || seconds < 0) return '—';
+      if (seconds < 60) return Math.floor(seconds) + 's';
+      if (seconds < 3600) return Math.floor(seconds / 60) + 'm ' + Math.floor(seconds % 60) + 's';
+      if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm';
+      return Math.floor(seconds / 86400) + 'd ' + Math.floor((seconds % 86400) / 3600) + 'h';
+    };
+    const setMetric = (id, value) => { const el = $(id); if (el) el.textContent = value; };
+    const renderMetrics = (elapsedSeconds, rate, eta) => {
+      const percent = Math.min(100, tested * 100 / keySpace);
+      setMetric('keySearchTested', tested.toLocaleString());
+      setMetric('keySearchPercent', percent.toFixed(6) + '%');
+      setMetric('keySearchRate', Math.round(rate).toLocaleString() + ' keys/s');
+      setMetric('keySearchPeakRate', Math.round(peakRate).toLocaleString() + ' keys/s');
+      setMetric('keySearchElapsed', formatDuration(elapsedSeconds));
+      setMetric('keySearchEta', tested >= keySpace ? '0s' : formatEta(eta));
+      setMetric('keySearchWorkers', String(lanes));
+      const fill = $('keySearchProgressFill');
+      if (fill) fill.style.width = percent + '%';
+      const track = $('keySearchProgressTrack');
+      if (track) track.setAttribute('aria-valuenow', percent.toFixed(6));
+    };
+    tested = 0;
+    peakRate = 0;
+    renderMetrics(0, 0, Infinity);
     keySearchCancelled = false;
     activeKeyWorkers = [];
     searchBtn.disabled = true;
@@ -248,13 +276,22 @@
           worker.onmessage = event => {
             const data = event.data || {};
             if (data.type === 'progress') {
-              tested += Number(data.delta || 0);
-              const elapsedSeconds = Math.max(0.001, (performance.now() - searchStartedAt) / 1000);
+              tested = Math.min(keySpace, tested + Math.max(0, Number(data.delta || 0)));
+              const now = performance.now();
+              const elapsedSeconds = Math.max(0.001, (now - searchStartedAt) / 1000);
               const rate = tested / elapsedSeconds;
+              if (now - lastSampleAt >= 1000) {
+                const sampleSeconds = (now - lastSampleAt) / 1000;
+                const sampleRate = Math.max(0, tested - lastSampleTested) / sampleSeconds;
+                peakRate = Math.max(peakRate, sampleRate);
+                lastSampleAt = now;
+                lastSampleTested = tested;
+              }
+              peakRate = Math.max(peakRate, rate);
               const eta = rate > 0 ? (keySpace - tested) / rate : Infinity;
-              searchStatus.textContent = 'Parallel search: ' + tested.toLocaleString() + ' / ' + keySpace.toLocaleString() +
-                ' (' + (tested * 100 / keySpace).toFixed(4) + '%) · ' + Math.round(rate).toLocaleString() +
-                ' keys/s · estimated remaining ' + formatEta(eta) + ' · ' + lanes + ' worker(s) · local only.';
+              renderMetrics(elapsedSeconds, rate, eta);
+              searchStatus.textContent = 'Searching locally · ' + lanes + ' worker(s) · average ' +
+                Math.round(rate).toLocaleString() + ' keys/s · ETA ' + formatEta(eta) + '.';
               return;
             }
             if (data.type === 'found') {
@@ -298,6 +335,15 @@
         ? 'Key search cancelled. No key was sent anywhere.'
         : 'Key search failed: ' + (error.message || String(error));
     } finally {
+      const now = performance.now();
+      const elapsedSeconds = Math.max(0, (now - searchStartedAt) / 1000);
+      const rate = elapsedSeconds > 0 ? tested / elapsedSeconds : 0;
+      if (now > lastSampleAt && tested > lastSampleTested) {
+        peakRate = Math.max(peakRate, (tested - lastSampleTested) / ((now - lastSampleAt) / 1000));
+      }
+      peakRate = Math.max(peakRate, rate);
+      const eta = rate > 0 ? Math.max(0, keySpace - tested) / rate : Infinity;
+      renderMetrics(elapsedSeconds, rate, eta);
       terminateWorkers();
       cancelActiveKeySearch = null;
       searchBtn.disabled = false;
