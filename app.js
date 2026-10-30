@@ -114,10 +114,10 @@ document.querySelectorAll('[data-device-button]').forEach(btn=>{
  btn.addEventListener('pointerdown',()=>btn.classList.add('pressed'));
  const release=()=>btn.classList.remove('pressed');
  btn.addEventListener('pointerup',release);btn.addEventListener('pointercancel',release);btn.addEventListener('pointerleave',release);
- let keyboardActivation=false;
+ let keyboardActivation=false;let lastKeyboardActivation=0;
   btn.addEventListener('keydown',event=>{
     if((event.key==='Enter'||event.key===' ')&&!event.repeat){
-      event.preventDefault();keyboardActivation=true;btn.classList.add('pressed');
+      event.preventDefault();keyboardActivation=true;lastKeyboardActivation=Date.now();btn.classList.add('pressed');
       reportDeviceInput('Button '+labels[name]+' pressed',{type:'button',button:name,pressed:true,source:'keyboard'});
     }
   });
@@ -130,7 +130,7 @@ document.querySelectorAll('[data-device-button]').forEach(btn=>{
   btn.addEventListener('blur',()=>{if(keyboardActivation){keyboardActivation=false;btn.classList.remove('pressed');reportDeviceInput('Button '+labels[name]+' released',{type:'button',button:name,pressed:false,source:'keyboard'});}});
   btn.addEventListener('click',event=>{
     if(event.detail===0){
-      if(!keyboardActivation){reportDeviceInput('Button '+labels[name]+' pressed',{type:'button',button:name,pressed:true,source:'keyboard'});setTimeout(()=>reportDeviceInput('Button '+labels[name]+' released',{type:'button',button:name,pressed:false,source:'keyboard'}),80);}
+      if(!keyboardActivation&&Date.now()-lastKeyboardActivation>500){reportDeviceInput('Button '+labels[name]+' pressed',{type:'button',button:name,pressed:true,source:'keyboard'});setTimeout(()=>reportDeviceInput('Button '+labels[name]+' released',{type:'button',button:name,pressed:false,source:'keyboard'}),80);}
     } else reportDeviceInput('Button '+labels[name]+' pressed',{type:'button',button:name});
   });
 });
