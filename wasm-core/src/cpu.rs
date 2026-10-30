@@ -10,16 +10,16 @@ pub enum CpuFault { UnsupportedInstruction(u16), InvalidExecutionAddress(u32), H
 pub struct ThumbCpu {
     pub r: [u32; 16],
     pub n: bool, pub z: bool, pub c: bool, pub v: bool,
-    pub instructions: u64, pub halted: bool, pub last_fault: Option<CpuFault>,
+    pub instructions: u64, pub halted: bool, pub last_fault: Option<CpuFault>, in_irq: bool,
 }
 impl ThumbCpu {
     pub fn new() -> Self {
-        Self { r:[0;16], n:false,z:false,c:false,v:false,instructions:0,halted:false,last_fault:None }
+        Self { r:[0;16], n:false,z:false,c:false,v:false,instructions:0,halted:false,last_fault:None,in_irq:false }
     }
     pub fn reset_from_vectors(&mut self, memory:&MemoryStorage, vector_base:u32) {
         self.r=[0;16]; self.r[13]=memory.read_u32(vector_base);
         self.r[15]=memory.read_u32(vector_base.wrapping_add(4)) & !1;
-        self.halted=false; self.last_fault=None; self.instructions=0;
+        self.halted=false; self.last_fault=None; self.instructions=0; self.in_irq=false;
     }
     fn set_nz(&mut self, value:u32) { self.n=value>>31!=0; self.z=value==0; }
     fn condition(&self, cond:u16)->bool { match cond {
@@ -84,7 +84,11 @@ impl ThumbCpu {
         }
         let f=CpuFault::UnsupportedInstruction(first); self.halted=true; self.last_fault=Some(f); Err(f)
     }
-    pub fn step(&mut self, m:&mut MemoryStorage)->Result<(),CpuFault> {
+    fn step_inner(&mut self, m:&mut MemoryStorage)->Result<(),CpuFault> {
+        if self.in_irq && self.r[15]>=0xFFFF_FFF0 {
+            self.exception_return(m);
+            return Ok(());
+        }
         if self.halted { return Err(CpuFault::Halted); }
         let pc=self.r[15];
         if pc&1!=0 || (pc&1)==0 && pc==0xffff_ffff {
@@ -231,6 +235,36 @@ impl ThumbCpu {
             _ => { let f=CpuFault::UnsupportedInstruction(op); self.halted=true; self.last_fault=Some(f); return Err(f); }
         }
         self.instructions=self.instructions.wrapping_add(1); Ok(())
+    }
+    fn service_dma_irq(&mut self, m:&mut MemoryStorage) {
+        if !m.dma_irq_pending || self.in_irq { return; }
+        m.dma_irq_pending=false;
+        let mut sp=self.r[13];
+        let xpsr=((self.n as u32)<<31)|((self.z as u32)<<30)|((self.c as u32)<<29)|((self.v as u32)<<28)|(1<<24);
+        let frame=[self.r[0],self.r[1],self.r[2],self.r[3],self.r[12],self.r[14],self.r[15],xpsr];
+        for value in frame.iter().rev() {
+            sp=sp.wrapping_sub(4);
+            for i in 0..4 { m.write_u8(sp+i,(value>>(i*8)) as u8); }
+        }
+        self.r[13]=sp;
+        self.r[14]=0xFFFF_FFF9;
+        self.r[15]=m.read_u32(0x0000_0128)&!1; // IRQ 58 vector (exception 74)
+        self.in_irq=true;
+    }
+    fn exception_return(&mut self,m:&MemoryStorage) {
+        let mut sp=self.r[13];
+        let mut pop=|| { let value=m.read_u32(sp); sp=sp.wrapping_add(4); value };
+        self.r[0]=pop(); self.r[1]=pop(); self.r[2]=pop(); self.r[3]=pop();
+        self.r[12]=pop(); self.r[14]=pop();
+        let pc=pop(); let xpsr=pop();
+        self.n=xpsr&(1<<31)!=0; self.z=xpsr&(1<<30)!=0;
+        self.c=xpsr&(1<<29)!=0; self.v=xpsr&(1<<28)!=0;
+        self.r[13]=sp; self.r[15]=pc&!1; self.in_irq=false;
+    }
+    pub fn step(&mut self,m:&mut MemoryStorage)->Result<(),CpuFault> {
+        let result=self.step_inner(m);
+        if result.is_ok() { self.service_dma_irq(m); }
+        result
     }
 }
 impl Default for ThumbCpu { fn default()->Self {Self::new()} }
