@@ -48,7 +48,7 @@
         const message = event.message || 'Could not load the WebAssembly worker package.';
         failAll(message);
         if (!coreReady) {
-          setStatus('Browser core unavailable', 'The WASM package could not be loaded. The build must finish publishing wasm-core/pkg before firmware can execute.');
+          setStatus('Browser core unavailable', 'The WASM package could not be loaded. Check that wasm-core/pkg is present and the site is served over HTTP(S).');
           worker?.terminate(); worker = null; initPromise = null;
         }
       };
@@ -257,6 +257,6 @@
   startWorker().then(() => {
     setStatus('WASM core ready · awaiting firmware', 'The browser package loaded successfully. Choose a local 16 MiB dump to inspect it. Firmware execution is experimental; no simulated pet is shown.');
   }).catch(error => {
-    setStatus('WASM package not available yet', 'The worker could not load wasm-core/pkg. This can happen until the CI build publishes the generated package. Details: ' + (error.message || String(error)));
+    setStatus('WASM package not available yet', 'The worker could not load wasm-core/pkg. Serve the site over HTTP(S), check the browser console, and confirm both generated package files are present. Details: ' + (error.message || String(error)));
   });
 })();
