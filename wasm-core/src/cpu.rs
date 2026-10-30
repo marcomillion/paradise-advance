@@ -46,21 +46,33 @@ impl ThumbCpu {
             0x0000..=0x07FF => { let shift=((op>>6)&31) as u32; let val=self.r[rm]<<shift; self.r[rd]=val; self.set_nz(val); self.c=if shift==0 {self.c} else {(self.r[rm]>>(32-shift))&1!=0}; },
             0x0800..=0x0FFF => { let shift=((op>>6)&31) as u32; let val=if shift==0 {0} else {self.r[rm]>>shift}; self.r[rd]=val; self.set_nz(val); self.c=if shift==0 {self.r[rm]>>31!=0} else {(self.r[rm]>>(shift-1))&1!=0}; },
             0x1800..=0x1FFF => { let imm=op&0x0400!=0; let sub=op&0x0200!=0; let a=self.r[rn]; let b=if imm {(op>>6&7) as u32} else {self.r[rm]}; let (val,carry)=if sub {a.overflowing_sub(b)} else {a.overflowing_add(b)}; self.r[rd]=val; self.set_nz(val); self.c=if sub {!carry} else {carry}; },
-            0x4000..=0x43FF => { let alu=(op>>6)&15; let a=self.r[rd]; let b=self.r[rm]; let val=match alu {
-                0=>a&b,1=>a^b,2=>a.wrapping_shl(b&0xff),3=>a.wrapping_shr(b&0xff),
-                4=>((a as i32)>>(b&0xff)) as u32,5=>{let (v,c)=a.overflowing_add(b).overflowing_add(self.c);self.c=c;v},
-                6=>{let (v,c)=a.overflowing_sub(b).overflowing_sub(!self.c);self.c=!c;v},
-                8=>{self.set_nz(a&b);continue_step!(self, next);},9=>0u32.wrapping_sub(b),
-                10=>{self.set_nz(a.wrapping_sub(b));self.c=a>=b;continue_step!(self,next);},
-                11=>{self.set_nz(a.wrapping_add(b));continue_step!(self,next);},
-                12=>a|b,13=>a.wrapping_mul(b),14=>a&!b,15=>!b,_=>0};
-                self.r[rd]=val; self.set_nz(val); },
+            0x4000..=0x43FF => {
+                let alu=(op>>6)&15; let a=self.r[rd]; let b=self.r[rm];
+                match alu {
+                    0=>{let v=a&b;self.r[rd]=v;self.set_nz(v);},
+                    1=>{let v=a^b;self.r[rd]=v;self.set_nz(v);},
+                    2=>{let shift=b&0xff;let v=a.wrapping_shl(shift);self.r[rd]=v;self.set_nz(v);if shift!=0 {self.c=(a>>(32-shift))&1!=0;}},
+                    3=>{let shift=b&0xff;let v=if shift>=32 {0}else{a>>shift};self.r[rd]=v;self.set_nz(v);if shift!=0 {self.c=if shift>32 {false}else{(a>>(shift-1))&1!=0};}},
+                    4=>{let shift=b&0xff;let v=if shift>=32 {if (a as i32)<0 {u32::MAX}else{0}}else{((a as i32)>>shift) as u32};self.r[rd]=v;self.set_nz(v);},
+                    5=>{let (tmp,c1)=a.overflowing_add(b);let (v,c2)=tmp.overflowing_add(self.c as u32);self.r[rd]=v;self.set_nz(v);self.c=c1||c2;},
+                    6=>{let (tmp,c1)=a.overflowing_sub(b);let (v,c2)=tmp.overflowing_sub((!self.c) as u32);self.r[rd]=v;self.set_nz(v);self.c=!(c1||c2);},
+                    8=>{self.set_nz(a&b);},
+                    9=>{let v=0u32.wrapping_sub(b);self.r[rd]=v;self.set_nz(v);self.c=b==0;},
+                    10=>{self.set_nz(a.wrapping_sub(b));self.c=a>=b;},
+                    11=>{let v=a.wrapping_add(b);self.set_nz(v);self.c=(v as u64)<(a as u64);},
+                    12=>{let v=a|b;self.r[rd]=v;self.set_nz(v);},
+                    13=>{let v=a.wrapping_mul(b);self.r[rd]=v;self.set_nz(v);},
+                    14=>{let v=a&!b;self.r[rd]=v;self.set_nz(v);},
+                    15=>{let v=!b;self.r[rd]=v;self.set_nz(v);},
+                    _=>{}
+                }
+            },
             0x4800..=0x4FFF => { let d=((op>>8)&7) as usize; let addr=((pc.wrapping_add(4))&!3).wrapping_add(((op&0xff) as u32)*4); self.r[d]=m.read_u32(addr); },
             0x6000..=0x67FF => { let addr=self.r[rn].wrapping_add(((op>>6&31) as u32)*4); m.write_u8(addr,self.r[rd] as u8); m.write_u8(addr+1,(self.r[rd]>>8) as u8); m.write_u8(addr+2,(self.r[rd]>>16) as u8); m.write_u8(addr+3,(self.r[rd]>>24) as u8); },
             0x6800..=0x6FFF => { let addr=self.r[rn].wrapping_add(((op>>6&31) as u32)*4); self.r[rd]=m.read_u32(addr); },
             0x7000..=0x77FF => { let addr=self.r[rn].wrapping_add(((op>>6&31) as u32)); m.write_u8(addr,self.r[rd] as u8); },
             0x7800..=0x7FFF => { let addr=self.r[rn].wrapping_add(((op>>6&31) as u32)); self.r[rd]=m.read_u8(addr) as u32; },
-            0x9000..=0x9FFF => { let d=((op>>8)&7) as usize; let addr=self.r[13].wrapping_add(((op&0xff) as u32)*4); if op&0x0800!=0 {let v=self.r[d];for i in 0..4 {m.write_u8(addr+i,v>>(i*8) as u8);}} else {self.r[d]=m.read_u32(addr);} },
+            0x9000..=0x9FFF => { let d=((op>>8)&7) as usize; let addr=self.r[13].wrapping_add(((op&0xff) as u32)*4); if op&0x0800!=0 {let v=self.r[d];for i in 0..4 {m.write_u8(addr+i,(v>>(i*8)) as u8);}} else {self.r[d]=m.read_u32(addr);} },
             0xA000..=0xAFFF => { let d=((op>>8)&7) as usize; self.r[d]=((pc.wrapping_add(4))&!3).wrapping_add(((op&0xff) as u32)*4); },
             0xB000..=0xB0FF => { let delta=((op&0x7f) as u32)*4; self.r[13]=if op&0x80!=0 {self.r[13].wrapping_sub(delta)} else {self.r[13].wrapping_add(delta)}; },
             0xD000..=0xDDFF => { let cond=(op>>8)&15; if cond<14 && self.condition(cond) {let off=(((op&0xff) as i8 as i32)<<1) as u32; self.r[15]=next.wrapping_add(off);} },
