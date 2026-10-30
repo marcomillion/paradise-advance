@@ -41,6 +41,25 @@ test('sprite editor can paint a pixel and export a project JSON', async ({ page 
   expect(download.suggestedFilename()).toMatch(/\.json$/);
 });
 
+test('keyboard zoom-dial input emits press and release events', async ({ page }) => {
+  await page.locator('[data-view="emulator"]').click();
+  await page.evaluate(() => {
+    window.__dialInputEvents = [];
+    document.addEventListener('paradise:device-input', event => {
+      const detail = event.detail || {};
+      if (detail.source === 'keyboard' && detail.button === 'DIAL') {
+        window.__dialInputEvents.push({ type: detail.type, pressed: detail.pressed });
+      }
+    });
+  });
+  await page.locator('#zoomDial').focus();
+  await page.locator('#zoomDial').press('Enter');
+  await expect.poll(() => page.evaluate(() => window.__dialInputEvents)).toEqual([
+    { type: 'button', pressed: true },
+    { type: 'button', pressed: false }
+  ]);
+});
+
 test('local gallery imports, exports, and removes a sprite draft', async ({ page }) => {
   const project = {
     format: 'paradise-mod-studio-sprite',
