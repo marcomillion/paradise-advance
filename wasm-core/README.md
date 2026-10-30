@@ -11,12 +11,13 @@ Implemented and covered by CI:
 - SNC73410 PRAM, boot-ROM, SRAM, mailbox and flash storage regions.
 - Incremental Thumb interpreter for common 16-bit instructions plus Thumb-2 MOVW/MOVT and BL; includes immediate operations, shifts, ALU operations, loads/stores, branches, stack and block transfers.
 - Browser bindings to load a Sonix image with a supplied key, copy its declared user-code region into PRAM, validate the reset vector, and step/run instructions.
+- Experimental framebuffer bridge: after each CPU step/batch, the display snapshot is refreshed from the configured SRAM framebuffer base and exposed through the CPU WASM API.
 - Unit tests for display conversion, memory regions, Sonix table parsing, AES primitives, and selected CPU instructions.
 
 Not yet implemented / known limitations:
 - Full ARMv7-M/Thumb instruction coverage, exceptions, NVIC and accurate CPU timing.
 - Real boot ROM behavior and the chip's full memory aliases / MMIO bus dispatch.
-- Hardware peripherals wired to the CPU, including DMA/display scanout, timers, GPIO/button controls, SPI and flash controller.
+- Hardware peripherals wired to the CPU, including DMA/display scanout, timers, GPIO/button controls, SPI and flash controller. The current framebuffer bridge only snapshots SRAM; it does not emulate DMA or prove the retail display driver works.
 - Complete initialization behavior required by the retail firmware.
 - Browser UI integration with the WASM bindings and verified boot of the user's encrypted dump.
 - Key recovery in-browser; the current loading API requires the correct device key from the user. A wrong key should fail reset-vector validation, but this is not a substitute for complete firmware validation.
