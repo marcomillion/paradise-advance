@@ -16,9 +16,9 @@ Implemented and covered by CI:
 - Unit tests for display conversion, memory regions, Sonix table parsing, AES primitives, and selected CPU instructions.
 
 Not yet implemented / known limitations:
-- Full ARMv7-M/Thumb instruction coverage, exceptions, NVIC and accurate CPU timing.
+- Full ARMv7-M/Thumb instruction coverage, general exception handling and accurate CPU timing. A narrow DMA-completion IRQ 58 path and the corresponding NVIC enable/clear-enable bits are implemented, but the NVIC model is not general-purpose.
 - Real boot ROM behavior and the chip's full memory aliases / MMIO bus dispatch.
-- Most hardware peripherals are not yet wired to the CPU: timers, SPI, flash controller, NVIC/interrupt behavior and much of the MMIO map remain missing. The current DMA path supports the observed channel register layout and transfers into the LCD panel data register, but is not a complete DMA controller and does not prove the retail display driver works.
+- Most hardware peripherals are not yet wired to the CPU: timers, SPI, flash controller, interrupt priorities/pending state and much of the MMIO map remain missing. The current DMA path supports the observed channel register layout and transfers into the LCD panel data register, but is not a complete DMA controller and does not prove the retail display driver works.
 - Complete initialization behavior required by the retail firmware.
 - Verified boot of the user's encrypted dump. The browser UI now exposes the WASM CPU controls and an experimental SRAM framebuffer snapshot, but retail firmware has not been proven to boot.
 - Device-key search is a heuristic candidate search over a 32-bit space, not yet validated against the user's retail dump. A candidate must still be tested by loading firmware and checking the reset vector / execution; a successful key search does not mean the emulator has booted.
