@@ -9,18 +9,18 @@ pub const SRAM_BASE: u32 = 0x1800_0000;
 pub const SRAM_SIZE: usize = 128 * 1024;
 pub const MAILBOX_BASE: u32 = 0x2000_0000;
 pub const MAILBOX_SIZE: usize = 4 * 1024;
-pub const FLASH_BASE: u32 = 0x6000_0000;
+pub const XIP_BASE: u32 = 0x1000_0000;\npub const XIP_SIZE: usize = 1024 * 1024;\npub const FLASH_BASE: u32 = 0x6000_0000;
 pub const FLASH_SIZE: usize = 16 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RegionKind { Pram, BootRom, Sram, Mailbox, Flash, Unmapped }
+pub enum RegionKind { Pram, BootRom, Sram, Mailbox, Xip, Flash, Unmapped }
 
 pub fn region_for(address: u32) -> RegionKind {
     if (PRAM_BASE..PRAM_BASE + PRAM_SIZE as u32).contains(&address) { RegionKind::Pram }
     else if (ROM_BASE..ROM_BASE + ROM_SIZE as u32).contains(&address) { RegionKind::BootRom }
     else if (SRAM_BASE..SRAM_BASE + SRAM_SIZE as u32).contains(&address) { RegionKind::Sram }
     else if (MAILBOX_BASE..MAILBOX_BASE + MAILBOX_SIZE as u32).contains(&address) { RegionKind::Mailbox }
-    else if (FLASH_BASE..FLASH_BASE + FLASH_SIZE as u32).contains(&address) { RegionKind::Flash }
+    else if (XIP_BASE..XIP_BASE + XIP_SIZE as u32).contains(&address) { RegionKind::Xip }\n    else if (FLASH_BASE..FLASH_BASE + FLASH_SIZE as u32).contains(&address) { RegionKind::Flash }
     else { RegionKind::Unmapped }
 }
 
@@ -54,7 +54,7 @@ impl MemoryStorage {
             RegionKind::BootRom => (&self.boot_rom[..], (address-ROM_BASE) as usize),
             RegionKind::Sram => (&self.sram[..], (address-SRAM_BASE) as usize),
             RegionKind::Mailbox => (&self.mailbox[..], (address-MAILBOX_BASE) as usize),
-            RegionKind::Flash => (&self.flash[..], (address-FLASH_BASE) as usize),
+            RegionKind::Xip => (&self.flash[..], (address-XIP_BASE) as usize),\n            RegionKind::Flash => (&self.flash[..], (address-FLASH_BASE) as usize),
             RegionKind::Unmapped => return 0,
         };
         slice.get(offset).copied().unwrap_or(0)
@@ -84,7 +84,7 @@ mod tests {
         assert_eq!(region_for(ROM_BASE),RegionKind::BootRom);
         assert_eq!(region_for(SRAM_BASE),RegionKind::Sram);
         assert_eq!(region_for(MAILBOX_BASE),RegionKind::Mailbox);
-        assert_eq!(region_for(FLASH_BASE),RegionKind::Flash);
+        assert_eq!(region_for(XIP_BASE),RegionKind::Xip);\n        assert_eq!(region_for(FLASH_BASE),RegionKind::Flash);
         assert_eq!(region_for(0x4000_0000),RegionKind::Unmapped);
     }
     #[test] fn reset_vector_boot_rom_is_little_endian() {
@@ -101,7 +101,7 @@ mod tests {
     #[test] fn flash_requires_full_dump() {
         let mut m=MemoryStorage::new();
         assert!(m.load_flash(&vec![0x12;FLASH_SIZE]).is_ok());
-        assert_eq!(m.read_u8(FLASH_BASE),0x12);
+        assert_eq!(m.read_u8(FLASH_BASE),0x12);\n        assert_eq!(m.read_u8(XIP_BASE),0x12);
         assert!(m.load_flash(&[1,2,3]).is_err());
     }
 }
