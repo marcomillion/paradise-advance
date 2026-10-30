@@ -10,16 +10,16 @@ pub enum CpuFault { UnsupportedInstruction(u16), InvalidExecutionAddress(u32), H
 pub struct ThumbCpu {
     pub r: [u32; 16],
     pub n: bool, pub z: bool, pub c: bool, pub v: bool,
-    pub instructions: u64, pub halted: bool, pub last_fault: Option<CpuFault>, in_irq: bool,
+    pub instructions: u64, pub halted: bool, pub last_fault: Option<CpuFault>, in_irq: bool, primask: bool,
 }
 impl ThumbCpu {
     pub fn new() -> Self {
-        Self { r:[0;16], n:false,z:false,c:false,v:false,instructions:0,halted:false,last_fault:None,in_irq:false }
+        Self { r:[0;16], n:false,z:false,c:false,v:false,instructions:0,halted:false,last_fault:None,in_irq:false,primask:false }
     }
     pub fn reset_from_vectors(&mut self, memory:&MemoryStorage, vector_base:u32) {
         self.r=[0;16]; self.r[13]=memory.read_u32(vector_base);
         self.r[15]=memory.read_u32(vector_base.wrapping_add(4)) & !1;
-        self.halted=false; self.last_fault=None; self.instructions=0; self.in_irq=false;
+        self.halted=false; self.last_fault=None; self.instructions=0; self.in_irq=false; self.primask=false;
     }
     fn set_nz(&mut self, value:u32) { self.n=value>>31!=0; self.z=value==0; }
     fn condition(&self, cond:u16)->bool { match cond {
@@ -102,6 +102,9 @@ impl ThumbCpu {
         let rd=(op&7) as usize; let rn=((op>>3)&7) as usize; let rm=((op>>6)&7) as usize;
         match op {
             0xBF00 => {}, // NOP
+            0xBF10 | 0xBF20 | 0xBF30 | 0xBF40 | 0xBF50 => {}, // YIELD/WFE/WFI/SEV/SEVL hints
+            0xB662 => { self.primask=false; }, // CPSIE i
+            0xB672 => { self.primask=true; },  // CPSID i
             0xBE00..=0xBEFF => { self.halted=true; },
             0x2000..=0x27FF => { let d=((op>>8)&7) as usize; let val=(op&0xff) as u32; self.r[d]=val; self.set_nz(val); },
             0x2800..=0x2FFF => { let val=self.r[((op>>8)&7) as usize].wrapping_sub((op&0xff) as u32); self.set_nz(val); self.c=self.r[((op>>8)&7) as usize]>=(op&0xff) as u32; },
@@ -237,7 +240,7 @@ impl ThumbCpu {
         self.instructions=self.instructions.wrapping_add(1); Ok(())
     }
     fn service_dma_irq(&mut self, m:&mut MemoryStorage) {
-        if !m.dma_irq_pending || !m.dma_irq_enabled() || self.in_irq { return; }
+        if !m.dma_irq_pending || !m.dma_irq_enabled() || self.in_irq || self.primask { return; }
         m.dma_irq_pending=false;
         let mut sp=self.r[13];
         let xpsr=((self.n as u32)<<31)|((self.z as u32)<<30)|((self.c as u32)<<29)|((self.v as u32)<<28)|(1<<24);
@@ -323,6 +326,15 @@ mod tests {
         assert_eq!(c.r[0],0xFFFF_FF80);
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[2],0x7856_3412);
+    }
+    #[test]
+    fn cpsid_and_cpsie_control_interrupt_mask() {
+        let mut m=MemoryStorage::new();
+        m.pram[0..2].copy_from_slice(&0xB672u16.to_le_bytes()); // CPSID i
+        m.pram[2..4].copy_from_slice(&0xB662u16.to_le_bytes()); // CPSIE i
+        let mut c=ThumbCpu::new(); c.r[15]=0;
+        assert!(c.step(&mut m).is_ok()); assert!(c.primask);
+        assert!(c.step(&mut m).is_ok()); assert!(!c.primask);
     }
     #[test]
     fn bx_lr_does_not_overwrite_exception_return_token() {
