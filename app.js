@@ -206,6 +206,21 @@ function decodeParadiseSpriteFrame(pkg, assetIndex, frameIndex, paletteSet=0) {
  }
  return {width:h.width,height:h.height,rgba,header:h};
 }
+function decodeParadiseSubimage(pkg, assetIndex, subimageIndex, paletteSet=0) {
+ const fw=state.firmware, all=fw.bytes, base=pkg.offset, rel=readU32(all,base+assetIndex*4), start=base+rel;
+ const h=parseSpriteHeader(all,start,base+pkg.length);if(!h)throw new Error('Invalid sprite header');
+ const cols=Math.max(1,h.imageWidth), rows=Math.max(1,h.imageHeight), per=cols*rows;
+ const total=Math.floor(h.count/per), index=Math.max(0,Math.min(total-1,subimageIndex));
+ const tileW=h.width,tileH=h.height,rgba=new Uint8ClampedArray(tileW*cols*tileH*rows*4);
+ for(let ty=0;ty<rows;ty++)for(let tx=0;tx<cols;tx++){
+  const tile=decodeParadiseSpriteFrame(pkg,assetIndex,index*per+ty*cols+tx,paletteSet);
+  for(let y=0;y<tileH;y++){
+   const src=(y*tileW)*4,dst=((ty*tileH+y)*(tileW*cols)+tx*tileW)*4;
+   rgba.set(tile.rgba.subarray(src,src+tileW*4),dst);
+  }
+ }
+ return {width:tileW*cols,height:tileH*rows,rgba,header:h};
+}
 function rgbaToPixels(decoded) {
  const pixels=[], palette=[];
  const map=new Map();
@@ -237,21 +252,21 @@ function renderSpritePackagePage(reset=false) {
   const pkg=paradiseExtract.filtered[n],h=pkg.firstHeader;
   const card=document.createElement('article');card.className='sprite-package-card';
   const canvas=document.createElement('canvas');canvas.className='sprite-package-preview';
-  try{drawDecodedSprite(canvas,decodeParadiseSpriteFrame(pkg,0,0))}catch(err){canvas.width=32;canvas.height=32;canvas.style.width='96px';canvas.style.height='96px'}
+  try{drawDecodedSprite(canvas,decodeParadiseSubimage(pkg,0,0))}catch(err){canvas.width=32;canvas.height=32;canvas.style.width='96px';canvas.style.height='96px'}
   const title=document.createElement('b');title.textContent='Package @ 0x'+pkg.offset.toString(16).toUpperCase();
   const meta=document.createElement('small');meta.textContent=pkg.entryCount+' image entries · first '+h.width+'×'+h.height+' · '+(h.bpp<=3?[1,2,4,8][h.bpp]+' bpp indexed':(h.bpp===18?'24-bit RGB':'16-bit RGB'));
   const assetRow=document.createElement('label');assetRow.className='sprite-frame-row';assetRow.textContent='Image ';
   const assetInput=document.createElement('input');assetInput.type='number';assetInput.min='0';assetInput.max=String(pkg.entryCount-1);assetInput.value='0';assetInput.setAttribute('aria-label','Image entry index');
   assetRow.append(assetInput,document.createTextNode(' / '+pkg.entryCount));
   const frameRow=document.createElement('label');frameRow.className='sprite-frame-row';frameRow.textContent='Frame ';
-  const frameInput=document.createElement('input');frameInput.type='number';frameInput.min='0';frameInput.max=String(Math.max(0,h.count-1));frameInput.value='0';frameInput.setAttribute('aria-label','Frame index');
+  const frameInput=document.createElement('input');frameInput.type='number';frameInput.min='0';frameInput.max=String(Math.max(0,Math.floor(h.count/(h.imageWidth*h.imageHeight))-1));frameInput.value='0';frameInput.setAttribute('aria-label','Frame index');
   frameRow.append(frameInput,document.createTextNode(' / '+h.count));
   const getSelectedHeader=()=>{const ai=Math.max(0,Math.min(pkg.entryCount-1,Number(assetInput.value)||0));return parseSpriteHeader(state.firmware.bytes,pkg.offset+readU32(state.firmware.bytes,pkg.offset+ai*4),pkg.offset+pkg.length)};
-  const refreshPreview=()=>{try{const sh=getSelectedHeader();if(!sh)throw new Error('Invalid sprite entry');assetInput.value=String(Math.max(0,Math.min(pkg.entryCount-1,Number(assetInput.value)||0)));frameInput.max=String(sh.count-1);const frame=Math.max(0,Math.min(sh.count-1,Number(frameInput.value)||0));frameInput.value=String(frame);frameRow.lastChild.textContent=' / '+sh.count;drawDecodedSprite(canvas,decodeParadiseSpriteFrame(pkg,Number(assetInput.value)||0,frame))}catch(err){toast('Could not decode this entry: '+err.message)}};
+  const refreshPreview=()=>{try{const sh=getSelectedHeader();if(!sh)throw new Error('Invalid sprite entry');assetInput.value=String(Math.max(0,Math.min(pkg.entryCount-1,Number(assetInput.value)||0)));frameInput.max=String(Math.max(0,Math.floor(sh.count/(sh.imageWidth*sh.imageHeight))-1));const frame=Math.max(0,Math.min(sh.count-1,Number(frameInput.value)||0));frameInput.value=String(frame);frameRow.lastChild.textContent=' / '+sh.count;drawDecodedSprite(canvas,decodeParadiseSubimage(pkg,Number(assetInput.value)||0,frame))}catch(err){toast('Could not decode this entry: '+err.message)}};
   assetInput.addEventListener('change',()=>{frameInput.value='0';refreshPreview()});
   frameInput.addEventListener('change',refreshPreview);
   const importBtn=document.createElement('button');importBtn.className='button primary';importBtn.textContent='Import frame to Studio';
-  importBtn.onclick=()=>{try{const ai=Math.max(0,Math.min(pkg.entryCount-1,Number(assetInput.value)||0)),sh=getSelectedHeader(),fi=Math.max(0,Math.min(sh.count-1,Number(frameInput.value)||0));const decoded=decodeParadiseSpriteFrame(pkg,ai,fi);const converted=rgbaToPixels(decoded);createSprite('Firmware '+pkg.offset.toString(16).toUpperCase()+' image '+ai+' frame '+fi,decoded.width,decoded.height,converted.pixels,converted.palette);nav('studio');toast('Decoded firmware sprite imported')}catch(err){toast('Import failed: '+err.message)}};
+  importBtn.onclick=()=>{try{const ai=Math.max(0,Math.min(pkg.entryCount-1,Number(assetInput.value)||0)),sh=getSelectedHeader(),fi=Math.max(0,Math.min(sh.count-1,Number(frameInput.value)||0));const decoded=decodeParadiseSubimage(pkg,ai,fi);const converted=rgbaToPixels(decoded);createSprite('Firmware '+pkg.offset.toString(16).toUpperCase()+' image '+ai+' frame '+fi,decoded.width,decoded.height,converted.pixels,converted.palette);nav('studio');toast('Decoded firmware sprite imported')}catch(err){toast('Import failed: '+err.message)}};
   const exportBtn=document.createElement('button');exportBtn.className='button';exportBtn.textContent='Export PNG';exportBtn.onclick=()=>{try{const ai=Math.max(0,Math.min(pkg.entryCount-1,Number(assetInput.value)||0)),sh=getSelectedHeader(),fi=Math.max(0,Math.min(sh.count-1,Number(frameInput.value)||0)),d=decodeParadiseSpriteFrame(pkg,ai,fi);const cv=document.createElement('canvas');cv.width=d.width;cv.height=d.height;cv.getContext('2d').putImageData(new ImageData(d.rgba,d.width,d.height),0,0);cv.toBlob(blob=>exportBlob(blob,'paradise_sprite_'+pkg.offset.toString(16)+'_image'+ai+'_frame'+fi+'.png'))}catch(err){toast('Export failed: '+err.message)}};
   card.append(canvas,title,meta,assetRow,frameRow,importBtn,exportBtn);grid.append(card);
  }
