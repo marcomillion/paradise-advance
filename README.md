@@ -8,7 +8,7 @@ A local-first browser workbench for inspecting Tamagotchi Paradise firmware and 
 - **Local workspace recovery:** sprites, gallery drafts, editor colour, grid, zoom, and the active sprite are saved in this browser's local storage. Export/import a workspace backup to preserve multiple sprites, drafts, preferences, and animation frames. Firmware bytes and device keys are not saved there.
 - **Animation timeline:** assemble sprite frames, preview playback, and export/import animation JSON.
 - **Firmware Lab:** inspect a local dump's header and SHA-256, view a coarse byte-region map, scan experimental bitmap candidates, and scan documented sprite-package layouts for decodable frames/subimages.
-- **Preview Lab:** loads the compiled WebAssembly core, inspects supported 16 MiB Sonix dumps, and exposes experimental CPU step/run controls and input buttons.
+- **Preview Lab:** loads the compiled WebAssembly core, inspects supported 16 MiB Sonix dumps, and exposes experimental CPU step/run controls and input buttons. The optional device-key search splits candidates across up to four local workers to use multiple CPU cores; it remains a brute-force search across up to 4,294,967,296 candidates.
 - **Local Gallery:** collect drafts, reopen them in Sprite Studio, export PNG/project JSON, or remove drafts. This is a local gallery, not a public sharing service.
 
 ## Run locally
@@ -56,7 +56,7 @@ wasm-pack build wasm-core --target web --out-dir pkg --release
 
 The WASM core is an **experimental emulator port**, not a verified full-device emulator. It supports Sonix load-table inspection/decryption, a growing subset of Thumb instructions, a partial memory/peripheral model, and an experimental framebuffer path. Most SNC73410 peripherals, complete instruction coverage, accurate boot-ROM behavior, and a verified retail-firmware boot are still missing. Unsupported instructions intentionally report faults instead of pretending to execute.
 
-The firmware inspector and sprite extractor also use best-effort format recognition. A candidate bitmap is not necessarily a real sprite, and unrecognised/compressed resource formats may be missed. Firmware patching/rebuilding and a public community backend are not implemented.
+The device-key search is still brute force: parallel workers can improve throughput on multi-core devices, but cannot guarantee a quick result and do not make a full 32-bit search small. A candidate must be validated by loading the firmware. The firmware inspector and sprite extractor also use best-effort format recognition. A candidate bitmap is not necessarily a real sprite, and unrecognised/compressed resource formats may be missed. Firmware patching/rebuilding and a public community backend are not implemented.
 
 ## Privacy and backups
 
