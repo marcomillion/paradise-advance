@@ -158,6 +158,7 @@ test('local gallery imports, exports, and removes a sprite draft', async ({ page
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(project))
   });
+  await page.locator('[data-view="gallery"]').click();
   await expect(page.locator('#galleryGrid')).toContainText('Gallery Draft');
   await expect(page.locator('#galleryGrid').getByRole('button', { name: 'Export project JSON' })).toBeVisible();
   await page.locator('#galleryGrid').getByRole('button', { name: 'Remove draft' }).click();
