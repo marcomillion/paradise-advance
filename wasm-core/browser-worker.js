@@ -34,7 +34,7 @@ self.onmessage = async (event) => {
       const token = ++keySearchToken;
       keySearchRequestId = id;
       const bytes = new Uint8Array(payload.bytes);
-      const chunkSize = Number(payload.chunkSize) || 20000;
+      const chunkSize = Number(payload.chunkSize) || 1000000;
       let start = Number(payload.start) || 0;
       const keySpace = 4294967296;
       while (start < keySpace && token === keySearchToken) {
@@ -46,7 +46,9 @@ self.onmessage = async (event) => {
           return;
         }
         start += count;
-        self.postMessage({ type: "key-search-progress", tested: start, total: keySpace, percent: start * 100 / keySpace });
+        if (start % 5000000 === 0 || start === keySpace) {
+          self.postMessage({ type: "key-search-progress", tested: start, total: keySpace, percent: start * 100 / keySpace });
+        }
         await new Promise(resolve => setTimeout(resolve, 0));
       }
       if (token === keySearchToken) self.postMessage({ id, ok: true, result: { found: false, exhausted: true, tested: start }});
