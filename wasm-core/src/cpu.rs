@@ -36,11 +36,11 @@ pub enum CpuFault { UnsupportedInstruction(u16), InvalidExecutionAddress(u32), H
 pub struct ThumbCpu {
     pub r: [u32; 16],
     pub n: bool, pub z: bool, pub c: bool, pub v: bool,
-    pub instructions: u64, pub halted: bool, pub last_fault: Option<CpuFault>, in_irq: bool, primask: bool, itstate: u8, ipsr: u32, exclusive_address: Option<u32>,
+    pub instructions: u64, pub halted: bool, pub last_fault: Option<CpuFault>, in_irq: bool, sleeping: bool, primask: bool, itstate: u8, ipsr: u32, exclusive_address: Option<u32>,
 }
 impl ThumbCpu {
     pub fn new() -> Self {
-        Self { r:[0;16], n:false,z:false,c:false,v:false,instructions:0,halted:false,last_fault:None,in_irq:false,primask:false,itstate:0,ipsr:0,exclusive_address:None }
+        Self { r:[0;16], n:false,z:false,c:false,v:false,instructions:0,halted:false,last_fault:None,in_irq:false,sleeping:false,primask:false,itstate:0,ipsr:0,exclusive_address:None }
     }
     pub fn reset_from_vectors(&mut self, memory:&MemoryStorage, vector_base:u32) {
         self.r=[0;16]; self.r[13]=memory.read_u32(vector_base);
@@ -48,7 +48,7 @@ impl ThumbCpu {
         // Reset returns APSR and execution-control state to architectural defaults too.
         self.n=false; self.z=false; self.c=false; self.v=false;
         self.halted=false; self.last_fault=None; self.instructions=0;
-        self.in_irq=false; self.primask=false; self.itstate=0; self.ipsr=0;
+        self.in_irq=false; self.sleeping=false; self.primask=false; self.itstate=0; self.ipsr=0;
         self.exclusive_address=None;
     }
     fn set_nz(&mut self, value:u32) { self.n=value>>31!=0; self.z=value==0; }
@@ -375,7 +375,8 @@ impl ThumbCpu {
         let rd=(op&7) as usize; let rn=((op>>3)&7) as usize; let rm=((op>>6)&7) as usize;
         match op {
             0xBF00 => {}, // NOP
-            0xBF10 | 0xBF20 | 0xBF30 | 0xBF40 | 0xBF50 => {}, // YIELD/WFE/WFI/SEV/SEVL hints
+            0xBF10 | 0xBF20 | 0xBF40 | 0xBF50 => {}, // YIELD/WFE/SEV/SEVL (event state is not modeled)
+            0xBF30 => { self.sleeping=true; }, // WFI: stop executing until an enabled interrupt wakes the core
             0xBF01..=0xBFFF if (op&0x000F)!=0 && ((op>>4)&0xF)<14 => { self.itstate=(op&0x00FF) as u8; }, // IT block
             0xB662 => { self.primask=false; }, // CPSIE i
             0xB672 => { self.primask=true; },  // CPSID i
@@ -562,13 +563,21 @@ impl ThumbCpu {
         self.ipsr=exception_number;self.in_irq=true;
     }
     fn service_pending_interrupt(&mut self,m:&mut MemoryStorage) {
-        if self.in_irq || self.primask { return; }
-        if m.systick_pending && m.systick_ctrl&2!=0 {
+        if self.in_irq { return; }
+        let systick_ready=m.systick_pending && m.systick_ctrl&2!=0;
+        let dma_ready=m.dma_irq_pending && m.dma_irq_enabled();
+        if self.primask {
+            if systick_ready || dma_ready { self.sleeping=false; }
+            return;
+        }
+        if systick_ready {
+            self.sleeping=false;
             m.systick_pending=false;
             self.enter_exception(m,15); // SysTick exception vector
             return;
         }
-        if m.dma_irq_pending && m.dma_irq_enabled() {
+        if dma_ready {
+            self.sleeping=false;
             m.dma_irq_pending=false;
             self.enter_exception(m,74); // DMA IRQ 58 + core exception offset 16
         }
@@ -593,6 +602,7 @@ impl ThumbCpu {
     fn step_inner(&mut self,m:&mut MemoryStorage)->Result<(),CpuFault> {
         if self.in_irq && self.r[15]>=0xFFFF_FFF0 { self.exception_return(m); return Ok(()); }
         if self.halted { return Err(CpuFault::Halted); }
+        if self.sleeping { return Ok(()); }
         let in_it=self.itstate!=0;
         if in_it {
             let pc=self.r[15];
@@ -645,6 +655,26 @@ mod tests {
         assert!(!c.halted); assert_eq!(c.last_fault,None); assert_eq!(c.instructions,0);
         assert!(!c.primask); assert_eq!(c.itstate,0); assert_eq!(c.ipsr,0);
         assert_eq!(c.exclusive_address,None); assert!(!c.in_irq);
+    }
+
+    #[test]
+    fn wfi_sleeps_until_enabled_systick_interrupt() {
+        let mut m=MemoryStorage::new();
+        m.pram[0..4].copy_from_slice(&[0x30,0xBF,0x2A,0x20]); // WFI; MOVS r0, #42
+        m.pram[0x100..0x102].copy_from_slice(&0xBF00u16.to_le_bytes());
+        for (i,b) in 0x101u32.to_le_bytes().iter().enumerate() { m.write_u8(15*4+i as u32,*b); }
+        m.systick_ctrl=3; // ENABLE | TICKINT
+        m.systick_reload=1;
+        m.systick_current=1;
+        let mut c=ThumbCpu::new();
+        c.r[13]=crate::memory::SRAM_BASE+0x100;
+        c.r[15]=0;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[15],0x100);
+        assert!(c.in_irq);
+        assert!(!c.sleeping);
+        assert_eq!(c.r[0],0);
+        assert_eq!(m.read_u32(c.r[13]+24),2); // stacked PC resumes after WFI
     }
 
     #[test]
