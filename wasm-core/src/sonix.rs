@@ -19,7 +19,7 @@ impl Region { pub fn is_empty(&self) -> bool { self.length == 0 } }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LoadTable {
     pub offset: usize, pub magic: String, pub version: u32, pub load_config: u32,
-    pub encrypted: bool, pub mode: CipherMode, pub user_code: Region,
+    pub encrypted: bool, pub mode: CipherMode, pub aes_key: [u8; 32], pub user_code: Region,
     pub sram_code: Region, pub dpd_code: Region,
 }
 fn read_u32(bytes: &[u8], offset: usize) -> Option<u32> {
@@ -36,9 +36,10 @@ impl LoadTable {
         let encrypted = (load_config & 1 != 0)
             && !(version >= VERSION_V3 && read_u32(table, 0x80)? == ENCRYPTER_PENDING);
         let region = |at| Some(Region { address: read_u32(table, at)?, length: read_u32(table, at+4)? });
+        let mut aes_key=[0u8;32]; aes_key.copy_from_slice(table.get(0x28..0x48)?);
         Some(Self {
             offset, magic: String::from_utf8_lossy(magic).into_owned(), version, load_config,
-            encrypted, mode: if version < VERSION_V3 { CipherMode::Ofb } else { CipherMode::Cbc },
+            encrypted, mode: if version < VERSION_V3 { CipherMode::Ofb } else { CipherMode::Cbc }, aes_key,
             user_code: region(0x10)?,
             sram_code: if version >= VERSION_V3 { region(0x90)? } else { Region{address:0,length:0} },
             dpd_code: if version >= VERSION_V3 { region(0x98)? } else { Region{address:0,length:0} },
@@ -89,6 +90,51 @@ mod tests {
         let mut b=sample(); b[0x80..0x84].copy_from_slice(&ENCRYPTER_PENDING.to_le_bytes());
         assert!(!LoadTable::parse(&b,0).unwrap().encrypted);
     }
+}
+
+/// Test a bounded range of candidate 32-bit device keys using the first decrypted
+/// vector block. This is designed to be called in small chunks from a browser worker.
+pub fn search_device_key_chunk(bytes:&[u8], start:u32, count:u32)->Result<Option<u32>, &'static str> {
+    let table=find_tables(bytes).into_iter().find(|t|t.encrypted).ok_or("No encrypted Sonix table found")?;
+    let region=if !table.sram_code.is_empty(){table.sram_code}else{table.user_code};
+    let off=(region.address&0x00FF_FFFF) as usize;
+    let raw: [u8;16]=bytes.get(off..off.checked_add(16).ok_or("Region offset overflow")?)
+        .ok_or("Encrypted vector block is outside the flash dump")?.try_into().map_err(|_|"Invalid vector block")?;
+    let mut key=table.aes_key; key.reverse();
+    let aes_region=Aes::new(&key);
+    let key128:[u8;16]=key[..16].try_into().map_err(|_|"Invalid AES key")?;
+    let aes_iv=Aes::new(&key128);
+    let iv_raw:[u8;16]=key[16..32].try_into().map_err(|_|"Invalid IV")?;
+    let mut first=raw;
+    if table.mode==CipherMode::Cbc { first.reverse(); }
+    let cbc_plain=aes_region.decrypt_block(&first);
+    let end=(start as u64).saturating_add(count as u64).min(u32::MAX as u64+1);
+    for candidate64 in (start as u64)..end {
+        let candidate=candidate64 as u32;
+        let dk=candidate.to_be_bytes();
+        let mut iv=iv_raw;
+        for (i,b) in iv.iter_mut().enumerate(){*b^=dk[i%4];}
+        let iv=aes_iv.encrypt_block(&iv);
+        let plain=match table.mode {
+            CipherMode::Cbc=>{let mut p=cbc_plain;for i in 0..16 {p[i]^=iv[i];}p.reverse();p},
+            CipherMode::Ofb=>{
+                let stream=aes_iv.encrypt_block(&iv);
+                let mut p=[0u8;16];
+                for w in 0..4 {
+                    let sw=u32::from_le_bytes(stream[(3-w)*4..(3-w)*4+4].try_into().unwrap());
+                    let v=u32::from_le_bytes(first[w*4..w*4+4].try_into().unwrap());
+                    p[w*4..w*4+4].copy_from_slice(&(v^sw.swap_bytes()).to_le_bytes());
+                }
+                p
+            }
+        };
+        let word=|i:usize|u32::from_le_bytes(plain[i*4..i*4+4].try_into().unwrap());
+        let sp=word(0); let pc=word(1); let irq1=word(2); let irq2=word(3);
+        let ram=(0x1800_0000..0x1804_0000).contains(&sp)||(0x2000_0000..0x2004_0000).contains(&sp);
+        let vector=|v:u32|v&1==1&&v!=1&&((v&!1)<0x0004_0000||(0x1000_0000..0x1010_0000).contains(&(v&!1)));
+        if ram&&sp&3==0&&pc&1==1&&pc!=1&&(pc&!1)<0x0004_0000&&vector(irq1)&&vector(irq2){return Ok(Some(candidate));}
+    }
+    Ok(None)
 }
 
 /// Decrypts encrypted load-table regions in a private copy of a flash dump.
