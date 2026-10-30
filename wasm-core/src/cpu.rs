@@ -83,3 +83,26 @@ impl ThumbCpu {
     }
 }
 impl Default for ThumbCpu { fn default()->Self {Self::new()} }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn executes_movs_and_adds_immediate() {
+        let mut m=MemoryStorage::new();
+        m.write_u8(0,0x2a); m.write_u8(1,0x20); // MOVS r0, #42
+        m.write_u8(2,0x01); m.write_u8(3,0x30); // ADDS r0, #1
+        let mut c=ThumbCpu::new(); c.r[15]=0;
+        assert!(c.step(&mut m).is_ok()); assert_eq!(c.r[0],42);
+        assert!(c.step(&mut m).is_ok()); assert_eq!(c.r[0],43);
+        assert_eq!(c.instructions,2);
+    }
+    #[test]
+    fn unsupported_opcode_faults_explicitly() {
+        let mut m=MemoryStorage::new();
+        m.write_u8(0,0x00); m.write_u8(1,0xF0);
+        let mut c=ThumbCpu::new(); c.r[15]=0;
+        assert!(matches!(c.step(&mut m),Err(CpuFault::UnsupportedInstruction(_))));
+        assert!(c.halted);
+    }
+}
