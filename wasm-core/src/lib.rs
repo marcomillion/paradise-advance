@@ -226,14 +226,20 @@ mod browser_integration_tests {
     }
 
     #[test]
-    fn browser_cpu_exposes_all_four_input_lines_and_rejects_invalid_indices() {
+    fn browser_cpu_exposes_all_four_input_lines() {
         let mut cpu = BrowserCpu::new();
         assert!(cpu.set_button(0, true).is_ok());
         assert!(cpu.set_button(1, true).is_ok());
         assert!(cpu.set_button(2, true).is_ok());
         assert!(cpu.set_button(3, true).is_ok());
-        assert!(cpu.set_button(4, true).is_err());
         assert!(cpu.set_button(3, false).is_ok());
+    }
+
+    #[test]
+    fn invalid_button_index_is_rejected_by_portable_input_layer() {
+        let mut cpu = BrowserCpu::new();
+        assert!(!cpu.memory.set_button(4, true));
+        assert_eq!(cpu.memory.gpio_buttons, [false; 4]);
     }
 
     #[test]
