@@ -157,6 +157,13 @@ export class BrowserCpu {
             throw takeFromExternrefTable0(ret[0]);
         }
     }
+    /**
+     * @returns {boolean}
+     */
+    sleeping() {
+        const ret = wasm.browsercpu_sleeping(this.__wbg_ptr);
+        return ret !== 0;
+    }
     step() {
         const ret = wasm.browsercpu_step(this.__wbg_ptr);
         if (ret[1]) {

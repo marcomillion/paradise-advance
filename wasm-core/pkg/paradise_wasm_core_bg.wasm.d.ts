@@ -21,6 +21,7 @@ export const browsercpu_rotate_dial: (a: number, b: number) => void;
 export const browsercpu_run_steps: (a: number, b: number) => number;
 export const browsercpu_set_button: (a: number, b: number, c: number) => [number, number];
 export const browsercpu_set_register: (a: number, b: number, c: number) => [number, number];
+export const browsercpu_sleeping: (a: number) => number;
 export const browsercpu_step: (a: number) => [number, number];
 export const browserdisplay_clear_dirty: (a: number) => void;
 export const browserdisplay_height: (a: number) => number;

@@ -28,6 +28,7 @@ export class BrowserCpu {
     run_steps(count: number): number;
     set_button(index: number, pressed: boolean): void;
     set_register(index: number, value: number): void;
+    sleeping(): boolean;
     step(): void;
 }
 
@@ -110,6 +111,7 @@ export interface InitOutput {
     readonly browsercpu_run_steps: (a: number, b: number) => number;
     readonly browsercpu_set_button: (a: number, b: number, c: number) => [number, number];
     readonly browsercpu_set_register: (a: number, b: number, c: number) => [number, number];
+    readonly browsercpu_sleeping: (a: number) => number;
     readonly browsercpu_step: (a: number) => [number, number];
     readonly browserdisplay_clear_dirty: (a: number) => void;
     readonly browserdisplay_height: (a: number) => number;
