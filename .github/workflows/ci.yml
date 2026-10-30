@@ -1,0 +1,49 @@
+name: Mod Studio CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    name: Browser JavaScript syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check app scripts
+        run: |
+          node --check app.js
+          node --check emulator.js
+          node --check wasm-core/browser-worker.js
+      - name: Verify generated WASM package exists
+        run: |
+          test -s wasm-core/pkg/paradise_wasm_core.js
+          test -s wasm-core/pkg/paradise_wasm_core_bg.wasm
+          grep -q 'WebAssembly' wasm-core/pkg/paradise_wasm_core.js
+
+  rust:
+    name: Rust tests and WebAssembly build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: latest
+      - name: Run Rust unit tests
+        run: cargo test --manifest-path wasm-core/Cargo.toml
+      - name: Compile WebAssembly target
+        run: cargo build --manifest-path wasm-core/Cargo.toml --target wasm32-unknown-unknown --release
+      - name: Verify generated package is reproducible
+        run: wasm-pack build wasm-core --target web --out-dir pkg --release
