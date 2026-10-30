@@ -569,8 +569,9 @@ impl ThumbCpu {
         if self.in_irq { return; }
         let systick_ready=m.systick_pending && m.systick_ctrl&2!=0;
         let dma_ready=m.dma_irq_pending && m.dma_irq_enabled();
+        let gpio_te_ready=m.gpio_te_irq_pending() && m.gpio_te_irq_enabled();
         if self.primask {
-            if systick_ready || dma_ready { self.sleeping=false; }
+            if systick_ready || dma_ready || gpio_te_ready { self.sleeping=false; }
             return;
         }
         if systick_ready {
@@ -583,6 +584,11 @@ impl ThumbCpu {
             self.sleeping=false;
             m.dma_irq_pending=false;
             self.enter_exception(m,74); // DMA IRQ 58 + core exception offset 16
+            return;
+        }
+        if gpio_te_ready {
+            self.sleeping=false;
+            self.enter_exception(m,27); // GPIO port 1 LCD tearing-effect IRQ
         }
     }
     fn exception_return(&mut self,m:&mut MemoryStorage) {
@@ -629,7 +635,7 @@ impl ThumbCpu {
     }
     pub fn step(&mut self,m:&mut MemoryStorage)->Result<(),CpuFault> {
         let result=self.step_inner(m);
-        if result.is_ok() { m.tick_systick(); self.service_pending_interrupt(m); }
+        if result.is_ok() { m.tick_systick(); m.tick_gpio(); self.service_pending_interrupt(m); }
         result
     }
 }
@@ -660,6 +666,23 @@ mod tests {
         assert_eq!(c.exclusive_address,None); assert!(!c.in_irq);
     }
 
+    #[test]
+    fn enabled_lcd_te_irq_enters_gpio_port_handler() {
+        let mut m=MemoryStorage::new();
+        m.pram[0..2].copy_from_slice(&0xBF00u16.to_le_bytes()); // NOP
+        m.pram[0x100..0x102].copy_from_slice(&0xBF00u16.to_le_bytes());
+        m.write_u32(27*4,0x101); // IRQ 27 vector points to handler at 0x100
+        m.gpio_port_irq_enable[1]=1<<10;
+        m.gpio_port_irq_status[1]=1<<10;
+        m.nvic_iser[0]|=1<<27;
+        let mut c=ThumbCpu::new();
+        c.r[13]=crate::memory::SRAM_BASE+0x100;
+        c.r[15]=0;
+        assert!(c.step(&mut m).is_ok());
+        assert!(c.in_irq);
+        assert_eq!(c.ipsr,27);
+        assert_eq!(c.r[15],0x100);
+    }
     #[test]
     fn ldr_reads_systick_countflag_then_clears_device_flag() {
         let mut m=MemoryStorage::new();
