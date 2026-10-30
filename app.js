@@ -124,6 +124,43 @@ function scanParadiseSpritePackages() {
    if(candidate){seen.add(key);packages.push(candidate)}
   }
  }
+ // Deep pass: discover documented offset-table sprite packages outside recognised ARC2 archives.
+ const known=new Set(packages.map(p=>p.offset));
+ const archiveRanges=[];
+ for(let p=0;(p=data.indexOf(0x41,p))!==-1;p++){
+  if(p+16>data.length||data[p+1]!==0x52||data[p+2]!==0x43||data[p+3]!==0x32)continue;
+  const total=readU32(data,p+8);
+  if(total>0&&total<0x1000000&&p+16+total<=data.length)archiveRanges.push([p,p+16+total]);
+ }
+ let deepFound=0;
+ for(let absolute=0;absolute+32<data.length;absolute+=4){
+  if(known.has(absolute)||archiveRanges.some(r=>absolute>=r[0]&&absolute<r[1]))continue;
+  const first=readU32(data,absolute);
+  if(first<8||first%4!==0||first>0x4000||absolute+first+24>data.length)continue;
+  const count=first/4;if(count<2||count>4096)continue;
+  let prev=first,ok=true;
+  for(let i=0;i<count;i++){const off=readU32(data,absolute+i*4);if(off<first||off<prev||absolute+off+24>data.length){ok=false;break}prev=off}
+  if(!ok)continue;
+  const firstHeader=parseSpriteHeader(data,absolute+readU32(data,absolute),data.length);
+  if(!firstHeader||firstHeader.length<24||firstHeader.length>0x200000)continue;
+  let plausible=0;
+  for(let i=0;i<Math.min(count,8);i++){
+   const off=readU32(data,absolute+i*4),hh=parseSpriteHeader(data,absolute+off,data.length);
+   if(hh&&hh.length>=24&&hh.length<=0x200000&&absolute+off+hh.length<=data.length)plausible++;
+  }
+  if(plausible<Math.min(count,2))continue;
+  const len=Math.min(data.length-absolute,0x800000);
+  const candidate=validateSpritePackage(data,absolute,len,-1,-1);
+  if(!candidate)continue;
+  candidate.discovery='deep scan';known.add(absolute);packages.push(candidate);deepFound++;
+ }
+ packages.forEach(p=>{
+  const h=p.firstHeader,w=h.width*h.imageWidth,ht=h.height*h.imageHeight;
+  const frames=Math.floor(h.count/Math.max(1,h.imageWidth*h.imageHeight));
+  // Labels are heuristic: the binary format does not contain human-readable asset names.
+  p.category=(w>=96&&ht>=64)?'backgrounds':(w<=32&&ht<=32&&frames<=4)?'icons':(frames>=4&&(w>=24||ht>=24))?'characters':(w<=48&&ht<=48)?'ui':frames>=2?'effects':'other';
+  if(!p.discovery)p.discovery='archive';
+ });
  packages.sort((a,b)=>a.offset-b.offset);
  paradiseExtract.packages=packages;
  paradiseExtract.filtered=packages;
@@ -243,8 +280,8 @@ function renderSpritePackagePage(reset=false) {
  if(reset){grid.innerHTML='';paradiseExtract.shown=0}
  const search=($('spritePackageSearch')?.value||'').trim().toLowerCase();
  paradiseExtract.filtered=paradiseExtract.packages.filter(p=>{
-  const h=p.firstHeader, hay=[p.offset.toString(16),p.offset.toString(10),p.entryCount,h.width+'x'+h.height,h.bpp,h.count].join(' ').toLowerCase();
-  return hay.includes(search);
+  const h=p.firstHeader, category=$('spriteCategoryFilter')?.value||'all', hay=[p.offset.toString(16),p.offset.toString(10),p.entryCount,h.width+'x'+h.height,h.bpp,h.count,p.category,p.discovery].join(' ').toLowerCase();
+  return (category==='all'||p.category===category)&&hay.includes(search);
  });
  if(reset) paradiseExtract.shown=0;
  const start=paradiseExtract.shown,end=Math.min(start+paradiseExtract.pageSize,paradiseExtract.filtered.length);
@@ -254,7 +291,7 @@ function renderSpritePackagePage(reset=false) {
   const canvas=document.createElement('canvas');canvas.className='sprite-package-preview';
   try{drawDecodedSprite(canvas,decodeParadiseSubimage(pkg,0,0))}catch(err){canvas.width=32;canvas.height=32;canvas.style.width='96px';canvas.style.height='96px'}
   const title=document.createElement('b');title.textContent='Package @ 0x'+pkg.offset.toString(16).toUpperCase();
-  const meta=document.createElement('small');meta.textContent=pkg.entryCount+' image entries · first '+h.width+'×'+h.height+' · '+(h.bpp<=3?[1,2,4,8][h.bpp]+' bpp indexed':(h.bpp===18?'24-bit RGB':'16-bit RGB'));
+  const meta=document.createElement('small');meta.textContent=pkg.category+' · '+pkg.discovery+' · '+pkg.entryCount+' image entries · first '+h.width+'×'+h.height+' · '+(h.bpp<=3?[1,2,4,8][h.bpp]+' bpp indexed':(h.bpp===18?'24-bit RGB':'16-bit RGB'));
   const assetRow=document.createElement('label');assetRow.className='sprite-frame-row';assetRow.textContent='Image ';
   const assetInput=document.createElement('input');assetInput.type='number';assetInput.min='0';assetInput.max=String(pkg.entryCount-1);assetInput.value='0';assetInput.setAttribute('aria-label','Image entry index');
   assetRow.append(assetInput,document.createTextNode(' / '+pkg.entryCount));
