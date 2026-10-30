@@ -694,6 +694,29 @@ mod tests {
     }
 
     #[test]
+    fn register_lsr_updates_carry_at_word_size_boundaries() {
+        let mut m=MemoryStorage::new();
+        // LSRS r0, r1 (register-controlled logical right shift).
+        m.pram[0..2].copy_from_slice(&0x40C8u16.to_le_bytes());
+        let mut c=ThumbCpu::new();
+
+        c.r[15]=0; c.r[0]=0x8000_0001; c.r[1]=32; c.c=false;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[0],0);
+        assert!(c.c); // A shift of exactly 32 carries original bit 31.
+
+        c.r[15]=0; c.r[0]=0x8000_0001; c.r[1]=33; c.c=true;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[0],0);
+        assert!(!c.c); // Larger shifts clear carry.
+
+        c.r[15]=0; c.r[0]=0x1234_5678; c.r[1]=0; c.c=true;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[0],0x1234_5678);
+        assert!(c.c); // A zero shift leaves carry unchanged.
+    }
+
+    #[test]
     fn register_asr_updates_carry_for_large_and_zero_shifts() {
         let mut m=MemoryStorage::new();
         // ASRS r0, r1 (register-controlled arithmetic right shift).
