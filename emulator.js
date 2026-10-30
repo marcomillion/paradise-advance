@@ -32,6 +32,11 @@
       }
       worker.onmessage = event => {
         const data = event.data || {};
+        if (data.type === 'key-search-progress') {
+          const el = $('deviceKeySearchStatus');
+          if (el) el.textContent = 'Checked ' + Number(data.tested).toLocaleString() + ' / 4,294,967,296 candidates (' + Number(data.percent).toFixed(4) + '%). Search is local to this browser.';
+          return;
+        }
         const entry = pending.get(data.id);
         if (entry) {
           pending.delete(data.id);
@@ -158,6 +163,39 @@
       setStatus('CPU stopped', error.message || String(error));
       $('emulatorStepBtn').disabled = true; $('emulatorRunBtn').disabled = true;
     }
+  });
+  $('searchDeviceKeyBtn')?.addEventListener('click', async () => {
+    if (!firmwareBytes || !firmwareInfo) {
+      $('deviceKeySearchStatus').textContent = 'Choose a valid 16 MiB firmware dump first.';
+      return;
+    }
+    if (!firmwareInfo.encrypted) {
+      $('deviceKeySearchStatus').textContent = 'This firmware table is marked unencrypted; a device-key search is unnecessary.';
+      return;
+    }
+    const searchBtn=$('searchDeviceKeyBtn');
+    const cancelBtn=$('cancelDeviceKeySearchBtn');
+    searchBtn.disabled=true; cancelBtn.disabled=false;
+    $('deviceKeySearchStatus').textContent='Starting local key search. This can take a very long time; keep this tab open.';
+    try {
+      const result=await request('search-key',{bytes:firmwareBytes,chunkSize:20000});
+      if (result.cancelled) {
+        $('deviceKeySearchStatus').textContent='Key search cancelled. No key was sent anywhere.';
+      } else if (result.found) {
+        $('deviceKeyInput').value=formatHex(result.key);
+        $('deviceKeySearchStatus').textContent='Candidate key found after checking ' + Number(result.tested).toLocaleString() + ' candidates. Try loading firmware to validate it.';
+      } else {
+        $('deviceKeySearchStatus').textContent='No candidate matched the full 32-bit key space.';
+      }
+    } catch (error) {
+      $('deviceKeySearchStatus').textContent='Key search failed: ' + (error.message || String(error));
+    } finally {
+      searchBtn.disabled=false; cancelBtn.disabled=true;
+    }
+  });
+  $('cancelDeviceKeySearchBtn')?.addEventListener('click', async () => {
+    $('cancelDeviceKeySearchBtn').disabled=true;
+    try { await request('cancel-key-search'); } catch (_) {}
   });
   document.querySelectorAll('[data-device-button]').forEach((button, index) => {
     const send = pressed => {
