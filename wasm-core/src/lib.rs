@@ -89,11 +89,11 @@ pub fn decrypt_firmware_with_key(bytes: &[u8], device_key: u32) -> Result<Vec<u8
 /// Browser API for incremental Thumb execution against the portable memory model.
 /// Unsupported opcodes halt and report an error; this is not yet a full SNC73410 machine.
 #[wasm_bindgen]
-pub struct BrowserCpu { cpu: ThumbCpu, memory: MemoryStorage }
+pub struct BrowserCpu { cpu: ThumbCpu, memory: MemoryStorage, display: DisplayController }
 #[wasm_bindgen]
 impl BrowserCpu {
     #[wasm_bindgen(constructor)]
-    pub fn new() -> BrowserCpu { BrowserCpu { cpu:ThumbCpu::new(), memory:MemoryStorage::new() } }
+    pub fn new() -> BrowserCpu { BrowserCpu { cpu:ThumbCpu::new(), memory:MemoryStorage::new(), display:DisplayController::new() } }
     pub fn load_flash(&mut self, bytes:&[u8]) -> Result<(),JsValue> {
         self.memory.load_flash(bytes).map_err(JsValue::from_str)
     }
@@ -116,6 +116,7 @@ impl BrowserCpu {
             return Err(JsValue::from_str("User-code reset vector is not Thumb; device key may be incorrect."));
         }
         self.cpu.reset_from_vectors(&self.memory,0);
+        self.display = DisplayController::new();
         Ok(())
     }
     pub fn reset_from_vectors(&mut self, vector_base:u32) {
@@ -130,13 +131,20 @@ impl BrowserCpu {
         Ok(self.cpu.r[index as usize])
     }
     pub fn step(&mut self)->Result<(),JsValue> {
-        self.cpu.step(&mut self.memory).map_err(|e|JsValue::from_str(&format!("{:?}",e)))
+        let result=self.cpu.step(&mut self.memory).map_err(|e|JsValue::from_str(&format!("{:?}",e)));
+        self.display.sync_from_sram(&self.memory.sram);
+        result
     }
     pub fn run_steps(&mut self,count:u32)->u32 {
         let mut done=0;
         for _ in 0..count.min(1_000_000) { if self.cpu.step(&mut self.memory).is_err(){break;} done+=1; }
+        self.display.sync_from_sram(&self.memory.sram);
         done
     }
+    pub fn display_width(&self)->u32 {self.display.width() as u32}
+    pub fn display_height(&self)->u32 {self.display.height() as u32}
+    pub fn display_rgba_framebuffer(&self)->Vec<u8> {self.display.rgba_bytes()}
+    pub fn display_enabled(&self)->bool {self.display.enabled()}
     pub fn instructions(&self)->u64 {self.cpu.instructions}
     pub fn halted(&self)->bool {self.cpu.halted}
     pub fn last_fault(&self)->String {format!("{:?}",self.cpu.last_fault)}
