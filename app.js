@@ -156,7 +156,7 @@ const keyboardButtonMap={ArrowLeft:'C',ArrowRight:'A',Enter:'B',Escape:'C'};
  });
  document.addEventListener('keyup',e=>{
   if(!$('view-emulator')?.classList.contains('active'))return;
-  if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)||e.target===dial)return;
+  if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)||e.target===dial||e.target?.matches?.('[data-device-button]'))return;
   const button=keyboardButtonMap[e.key];
   if(button)reportDeviceInput('Keyboard released '+button+' button',{type:'button',button,pressed:false,source:'keyboard'});
  });
