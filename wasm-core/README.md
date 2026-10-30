@@ -17,7 +17,7 @@ Implemented and covered by CI:
 Not yet implemented / known limitations:
 - Full ARMv7-M/Thumb instruction coverage, exceptions, NVIC and accurate CPU timing.
 - Real boot ROM behavior and the chip's full memory aliases / MMIO bus dispatch.
-- Hardware peripherals wired to the CPU, including DMA/display scanout, timers, GPIO/button controls, SPI and flash controller. The current framebuffer bridge only snapshots SRAM; it does not emulate DMA or prove the retail display driver works.
+- Most hardware peripherals are not yet wired to the CPU: timers, SPI, flash controller, NVIC/interrupt behavior and much of the MMIO map remain missing. The current DMA path supports the observed channel register layout and transfers into the LCD panel data register, but is not a complete DMA controller and does not prove the retail display driver works.
 - Complete initialization behavior required by the retail firmware.
 - Verified boot of the user's encrypted dump. The browser UI now exposes the WASM CPU controls and an experimental SRAM framebuffer snapshot, but retail firmware has not been proven to boot.
 - Key recovery in-browser; the current loading API requires the correct device key from the user. A wrong key should fail reset-vector validation, but this is not a substitute for complete firmware validation.
