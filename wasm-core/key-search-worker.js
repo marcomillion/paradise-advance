@@ -25,11 +25,16 @@ self.onmessage = async (event) => {
     while (start < keySpace && !cancelled) {
       const count = Math.min(chunkSize, keySpace - start);
       const found = search_device_key_candidates(bytes, start >>> 0, count);
-      pendingProgress += count;
       if (found !== undefined && found !== null) {
-        self.postMessage({ type: "found", key: Number(found) >>> 0, tested: start + count });
+        // The Rust search walks this chunk in ascending order, so count only
+        // candidates through the match rather than the entire allocated chunk.
+        const foundKey = Number(found) >>> 0;
+        const checked = Math.max(1, Math.min(count, foundKey - start + 1));
+        self.postMessage({ type: "progress", delta: checked });
+        self.postMessage({ type: "found", key: foundKey, tested: start + checked });
         return;
       }
+      pendingProgress += count;
       start += stride;
       const now = performance.now();
       if (now - lastReport >= 500 || start >= keySpace) {
