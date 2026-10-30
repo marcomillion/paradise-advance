@@ -105,6 +105,15 @@ impl ThumbCpu {
             0x3800..=0x3FFF => { let d=((op>>8)&7) as usize; let (val,borrow)=self.r[d].overflowing_sub((op&0xff) as u32); self.r[d]=val; self.set_nz(val); self.c=!borrow; },
             0x0000..=0x07FF => { let shift=((op>>6)&31) as u32; let val=self.r[rm]<<shift; self.r[rd]=val; self.set_nz(val); self.c=if shift==0 {self.c} else {(self.r[rm]>>(32-shift))&1!=0}; },
             0x0800..=0x0FFF => { let shift=((op>>6)&31) as u32; let val=if shift==0 {0} else {self.r[rm]>>shift}; self.r[rd]=val; self.set_nz(val); self.c=if shift==0 {self.r[rm]>>31!=0} else {(self.r[rm]>>(shift-1))&1!=0}; },
+            0x1000..=0x17FF => {
+                // ASR (immediate); an encoded shift of zero means shift by 32.
+                let shift=((op>>6)&31) as u32;
+                let amount=if shift==0 {32} else {shift};
+                let source=self.r[rm] as i32;
+                let value=(source >> amount) as u32;
+                self.r[rd]=value; self.set_nz(value);
+                self.c=if amount==32 {source<0} else {((self.r[rm]>>(amount-1))&1)!=0};
+            },
             0x1800..=0x1FFF => { let imm=op&0x0400!=0; let sub=op&0x0200!=0; let a=self.r[rn]; let b=if imm {(op>>6&7) as u32} else {self.r[rm]}; let (val,carry)=if sub {a.overflowing_sub(b)} else {a.overflowing_add(b)}; self.r[rd]=val; self.set_nz(val); self.c=if sub {!carry} else {carry}; },
             0x4000..=0x43FF => {
                 let alu=(op>>6)&15; let a=self.r[rd]; let b=self.r[rm];
@@ -202,6 +211,16 @@ mod tests {
         assert!(c.step(&mut m).is_ok()); assert_eq!(c.r[0],42);
         assert!(c.step(&mut m).is_ok()); assert_eq!(c.r[0],43);
         assert_eq!(c.instructions,2);
+    }
+    #[test]
+    fn executes_asr_immediate_with_sign_extension() {
+        let mut m=MemoryStorage::new();
+        // ASRS r0, r1, #4
+        m.write_u8(0,0x48); m.write_u8(1,0x10);
+        let mut c=ThumbCpu::new(); c.r[15]=0; c.r[1]=0x8000_0000;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[0],0xF800_0000);
+        assert!(c.n); assert!(!c.z);
     }
     #[test]
     fn executes_thumb2_addw_immediate() {
