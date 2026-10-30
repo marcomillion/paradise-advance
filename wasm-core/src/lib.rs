@@ -132,7 +132,11 @@ impl BrowserCpu {
     }
     pub fn run_steps(&mut self,count:u32)->u32 {
         let mut done=0;
-        for _ in 0..count.min(1_000_000) { if self.cpu.step(&mut self.memory).is_err(){break;} done+=1; }
+        for _ in 0..count.min(1_000_000) {
+            let before=self.cpu.instructions;
+            if self.cpu.step(&mut self.memory).is_err(){break;}
+            if self.cpu.instructions!=before { done+=1; }
+        }
         if let Some(frame)=self.memory.panel_frame.take() { self.display.receive_frame(&frame); }
         else { self.display.sync_from_sram(&self.memory.sram); }
         done
@@ -218,6 +222,18 @@ mod browser_integration_tests {
         let frame=cpu.display_rgba_framebuffer();
         assert_eq!(&frame[0..4],&[0,255,0,255]);
         assert_eq!(&frame[4..8],&[0,0,255,255]);
+    }
+
+    #[test]
+    fn run_steps_counts_instructions_not_idle_sleep_iterations() {
+        let mut cpu=BrowserCpu::new();
+        cpu.memory.pram[0..2].copy_from_slice(&0xBF30u16.to_le_bytes()); // WFI
+        cpu.memory.pram[2..4].copy_from_slice(&0x202Au16.to_le_bytes()); // MOVS r0, #42
+        cpu.cpu.r[15]=0;
+        assert_eq!(cpu.run_steps(5),1);
+        assert_eq!(cpu.instructions(),1);
+        assert_eq!(cpu.register(15).unwrap(),2);
+        assert_eq!(cpu.register(0).unwrap(),0);
     }
 
     #[test]
