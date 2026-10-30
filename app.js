@@ -75,7 +75,7 @@ document.querySelectorAll('[data-device-button]').forEach(btn=>{
  btn.addEventListener('pointerdown',()=>btn.classList.add('pressed'));
  const release=()=>btn.classList.remove('pressed');
  btn.addEventListener('pointerup',release);btn.addEventListener('pointercancel',release);btn.addEventListener('pointerleave',release);
- btn.addEventListener('click',()=>reportDeviceInput('Button '+labels[name]+' pressed',{type:'button',button:name}));
+ btn.addEventListener('click',event=>{if(event.detail===0){reportDeviceInput('Button '+labels[name]+' pressed',{type:'button',button:name,pressed:true,source:'keyboard'});setTimeout(()=>reportDeviceInput('Button '+labels[name]+' released',{type:'button',button:name,pressed:false,source:'keyboard'}),80);}else reportDeviceInput('Button '+labels[name]+' pressed',{type:'button',button:name});});
 });
 const dial=$('zoomDial');let dialDragging=false,dialLastX=0,dialAngle=0,dialRemainder=0;
 function rotateDial(delta,source='pointer'){
@@ -93,7 +93,7 @@ dial.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDe
 const keyboardButtonMap={ArrowLeft:'C',ArrowRight:'A',Enter:'B',Escape:'C'};
  document.addEventListener('keydown',e=>{
   if(!$('view-emulator')?.classList.contains('active'))return;
-  if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)||e.target===dial)return;
+  if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)||e.target===dial||e.target?.matches?.('[data-device-button]'))return;
   const button=keyboardButtonMap[e.key];
   if(button){e.preventDefault();reportDeviceInput('Keyboard → '+button+' button',{type:'button',button,pressed:true,source:'keyboard'});}
  });
