@@ -143,6 +143,12 @@ impl ThumbCpu {
             }
             self.instructions=self.instructions.wrapping_add(1);return Ok(());
         }
+        // CLZ (count leading zero bits).
+        if (op1&0xFFF0)==0xFAB0 && (op2&0xF0F0)==0xF080 {
+            let rn=(op1&0xF) as usize;let rd=((op2>>8)&0xF) as usize;
+            self.r[rd]=self.r[rn].leading_zeros();
+            self.instructions=self.instructions.wrapping_add(1);return Ok(());
+        }
         // MRS / MSR access to core special registers used by interrupt handlers.
         if op1==0xF3EF && (op2&0xF000)==0x8000 {
             let rd=((op2>>8)&0xF) as usize;let sysm=op2&0xFF;
@@ -686,6 +692,14 @@ mod tests {
         let mut c=ThumbCpu::new();c.r[15]=0;c.r[1]=0x100;
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[0],0xFF);
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[2],0x1FF);
+    }
+    #[test]
+    fn executes_thumb2_clz() {
+        let mut m=MemoryStorage::new();
+        // CLZ r2, r1
+        m.write_u8(0,0xB1);m.write_u8(1,0xFA);m.write_u8(2,0x80);m.write_u8(3,0xF2);
+        let mut c=ThumbCpu::new();c.r[15]=0;c.r[1]=1;
+        assert!(c.step(&mut m).is_ok());assert_eq!(c.r[2],31);
     }
     #[test]
     fn executes_mrs_and_msr_primask() {
