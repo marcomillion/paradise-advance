@@ -768,7 +768,7 @@ mod tests {
         let mut m=MemoryStorage::new();
         // LDREX r0, [r1]; STREX r2, r3, [r1]
         m.write_u8(0,0x51);m.write_u8(1,0xE8);m.write_u8(2,0x00);m.write_u8(3,0x0F);
-        m.write_u8(4,0x41);m.write_u8(5,0xE8);m.write_u8(6,0x00);m.write_u8(7,0x20);
+        m.write_u8(4,0x41);m.write_u8(5,0xE8);m.write_u8(6,0x00);m.write_u8(7,0x32);
         let mut c=ThumbCpu::new();c.r[15]=0;c.r[1]=0x100;c.r[3]=0xABCD_1234;
         m.write_u8(0x100,0x78);m.write_u8(0x101,0x56);m.write_u8(0x102,0x34);m.write_u8(0x103,0x12);
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[0],0x1234_5678);
