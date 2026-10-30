@@ -626,6 +626,28 @@ mod tests {
     }
 
     #[test]
+    fn push_and_pop_preserve_register_order_and_restore_stack_pointer() {
+        let mut m=MemoryStorage::new();
+        // PUSH {r0, r2, lr}; POP {r0, r2, pc}
+        m.pram[0..2].copy_from_slice(&0xB505u16.to_le_bytes());
+        m.pram[2..4].copy_from_slice(&0xBD05u16.to_le_bytes());
+        let initial_sp=crate::memory::SRAM_BASE+0x100;
+        let mut c=ThumbCpu::new();
+        c.r[13]=initial_sp; c.r[0]=0x1122_3344; c.r[2]=0x5566_7788; c.r[14]=0x101;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[13],initial_sp-12);
+        assert_eq!(m.read_u32(initial_sp-12),0x1122_3344);
+        assert_eq!(m.read_u32(initial_sp-8),0x5566_7788);
+        assert_eq!(m.read_u32(initial_sp-4),0x101);
+        c.r[0]=0; c.r[2]=0; c.r[15]=2;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[0],0x1122_3344);
+        assert_eq!(c.r[2],0x5566_7788);
+        assert_eq!(c.r[13],initial_sp);
+        assert_eq!(c.r[15],0x100);
+    }
+
+    #[test]
     fn executes_movs_and_adds_immediate() {
         let mut m=MemoryStorage::new();
         m.write_u8(0,0x2a); m.write_u8(1,0x20); // MOVS r0, #42
