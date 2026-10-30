@@ -3,9 +3,11 @@
 
 mod display;
 mod sonix;
+mod memory;
 use wasm_bindgen::prelude::*;
 pub use display::{DisplayController, LCD_HEIGHT, LCD_WIDTH};
 pub use sonix::{find_tables, CipherMode, LoadTable, Region};
+pub use memory::{MemoryStorage, RegionKind};
 
 #[wasm_bindgen]
 pub struct BrowserDisplay { controller: DisplayController }
