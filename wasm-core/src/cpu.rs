@@ -149,7 +149,7 @@ impl ThumbCpu {
                     0=>{let v=self.r[rd].wrapping_add(self.r[rs]);if rd==15 {self.r[15]=v&!1;} else {self.r[rd]=v;}},
                     1=>{let v=self.r[rd].wrapping_sub(self.r[rs]);self.set_nz(v);self.c=self.r[rd]>=self.r[rs];},
                     2=>{let v=self.r[rs];if rd==15 {self.r[15]=v&!1;} else {self.r[rd]=v;}},
-                    3=>{self.r[14]=next|1;self.r[15]=self.r[rs]&!1;},
+                    3=>{let target=self.r[rs];if op&0x0080!=0 {self.r[14]=next|1;}self.r[15]=target&!1;},
                     _=>{}
                 }
             },
@@ -323,6 +323,15 @@ mod tests {
         assert_eq!(c.r[0],0xFFFF_FF80);
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[2],0x7856_3412);
+    }
+    #[test]
+    fn bx_lr_does_not_overwrite_exception_return_token() {
+        let mut m=MemoryStorage::new();
+        m.pram[0..2].copy_from_slice(&0x4770u16.to_le_bytes()); // BX LR
+        let mut c=ThumbCpu::new(); c.r[15]=0; c.r[14]=0xFFFF_FFF9;
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[15],0xFFFF_FFF8);
+        assert_eq!(c.r[14],0xFFFF_FFF9);
     }
     #[test]
     fn dma_completion_irq_enters_handler_and_returns_to_thread() {
