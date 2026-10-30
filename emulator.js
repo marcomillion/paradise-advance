@@ -178,7 +178,7 @@
     searchBtn.disabled=true; cancelBtn.disabled=false;
     $('deviceKeySearchStatus').textContent='Starting local key search. This can take a very long time; keep this tab open.';
     try {
-      const result=await request('search-key',{bytes:firmwareBytes,chunkSize:20000});
+      const result=await request('search-key',{bytes:firmwareBytes,chunkSize:1000000});
       if (result.cancelled) {
         $('deviceKeySearchStatus').textContent='Key search cancelled. No key was sent anywhere.';
       } else if (result.found) {
