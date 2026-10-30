@@ -67,7 +67,7 @@ if($('scanFirmwareBtn'))$('scanFirmwareBtn').onclick=scanRawCandidates;
 
 /* Documented Tamagotchi Paradise archive + sprite-package reader.
    Firmware remains in browser memory; this code never uploads it. */
-const paradiseExtract = { packages: [], filtered: [], shown: 0, pageSize: 36 };
+const paradiseExtract = { packages: [], filtered: [], assets: [], filteredAssets: [], shown: 0, pageSize: 48 };
 const readU16 = (a, p) => p >= 0 && p + 2 <= a.length ? a[p] | (a[p + 1] << 8) : 0;
 const readU32 = (a, p) => p >= 0 && p + 4 <= a.length ? (a[p] | (a[p + 1] << 8) | (a[p + 2] << 16) | (a[p + 3] << 24)) >>> 0 : 0;
 function parseSpriteHeader(data, start, packageLength) {
@@ -117,10 +117,10 @@ function scanParadiseSpritePackages() {
   if(table+files*16>p+16+total) continue;
   for(let i=0;i<files;i++){
    const e=table+i*16, off=readU32(data,e+4), comp=readU32(data,e+8), raw=readU32(data,e+12);
-   if(off<16+files*16||!comp||off+Math.max(comp,raw)>total||p+off+Math.max(comp,raw)>data.length) continue;
-   const absolute=p+off, key=absolute+':'+Math.max(comp,raw);
+   if(off<16+files*16||!comp||off+Math.max(comp,raw)>16+total||p+off+Math.max(comp,raw)>data.length) continue;
+   const absolute=p+off, entryLength=raw||comp, key=absolute+':'+entryLength;
    if(seen.has(key)) continue;
-   const candidate=validateSpritePackage(data,absolute,Math.max(comp,raw),p,i);
+   const candidate=validateSpritePackage(data,absolute,entryLength,p,i);
    if(candidate){seen.add(key);packages.push(candidate)}
   }
  }
@@ -165,11 +165,12 @@ function scanParadiseSpritePackages() {
  paradiseExtract.packages=packages;
  paradiseExtract.filtered=packages;
  paradiseExtract.shown=0;
+ buildParadiseAssetIndex();
  const search=$('spritePackageSearch');
  if(search) search.disabled=!packages.length;
- $('spritePackageCount').textContent=packages.length+' package'+(packages.length===1?'':'s')+' found';
+ $('spritePackageCount').textContent=paradiseExtract.assets.length+' assets · '+packages.length+' packages';
  $('spritePackageStatus').textContent=packages.length
-  ? 'Found '+packages.length+' candidate package(s), including '+deepFound+' from the broader scan. Categories are inferred from dimensions and frame counts, not official names; review previews because the firmware layout may contain assets the scanner cannot yet identify.'
+  ? 'Decoded '+paradiseExtract.assets.length+' image entries from '+packages.length+' candidate sprite packages ('+deepFound+' deep-scan candidates). This is every valid sprite entry the current parser recognises; unsupported resource formats may still be missing.'
   : 'No documented sprite packages found in this file. Confirm that this is a complete Paradise flash dump.';
  renderSpritePackagePage(true);
 }
@@ -275,42 +276,60 @@ function drawDecodedSprite(canvas, decoded) {
  canvas.style.width=Math.max(64,Math.min(160,decoded.width*3))+'px';
  canvas.style.height=Math.max(64,Math.min(160,decoded.height*3))+'px';
 }
+function buildParadiseAssetIndex() {
+ const data=state.firmware?.bytes;if(!data)return;
+ const assets=[];
+ for(const pkg of paradiseExtract.packages){
+  for(let ai=0;ai<pkg.entryCount;ai++){
+   const rel=readU32(data,pkg.offset+ai*4),absolute=pkg.offset+rel;
+   const h=parseSpriteHeader(data,absolute,pkg.offset+pkg.length);
+   if(!h)continue;
+   const subimages=Math.floor(h.count/(h.imageWidth*h.imageHeight));
+   if(!subimages)continue;
+   const w=h.width*h.imageWidth,ht=h.height*h.imageHeight;
+   const category=(w>=96&&ht>=64)?'backgrounds':(w<=32&&ht<=32&&subimages<=4)?'icons':(subimages>=4&&(w>=24||ht>=24))?'characters':(w<=48&&ht<=48)?'ui':subimages>=2?'effects':'other';
+   assets.push({pkg,assetIndex:ai,header:h,subimages,width:w,height:ht,category,id:pkg.offset+':'+ai});
+  }
+ }
+ paradiseExtract.assets=assets;
+}
 function renderSpritePackagePage(reset=false) {
  const grid=$('spritePackageResults');if(!grid)return;
  if(reset){grid.innerHTML='';paradiseExtract.shown=0}
  const search=($('spritePackageSearch')?.value||'').trim().toLowerCase();
- paradiseExtract.filtered=paradiseExtract.packages.filter(p=>{
-  const h=p.firstHeader, category=$('spriteCategoryFilter')?.value||'all', hay=[p.offset.toString(16),p.offset.toString(10),p.entryCount,h.width+'x'+h.height,h.bpp,h.count,p.category,p.discovery].join(' ').toLowerCase();
-  return (category==='all'||p.category===category)&&hay.includes(search);
+ const category=$('spriteCategoryFilter')?.value||'all';
+ paradiseExtract.filteredAssets=paradiseExtract.assets.filter(a=>{
+  const h=a.header,p=a.pkg;
+  const hay=[a.assetIndex,p.offset.toString(16),p.offset.toString(10),h.width+'x'+h.height,a.width+'x'+a.height,h.bpp,h.count,a.subimages,a.category,p.discovery].join(' ').toLowerCase();
+  return (category==='all'||a.category===category)&&hay.includes(search);
  });
- if(reset) paradiseExtract.shown=0;
- const start=paradiseExtract.shown,end=Math.min(start+paradiseExtract.pageSize,paradiseExtract.filtered.length);
+ if(reset)paradiseExtract.shown=0;
+ const start=paradiseExtract.shown,end=Math.min(start+paradiseExtract.pageSize,paradiseExtract.filteredAssets.length);
  for(let n=start;n<end;n++){
-  const pkg=paradiseExtract.filtered[n],h=pkg.firstHeader;
-  const card=document.createElement('article');card.className='sprite-package-card';
+  const asset=paradiseExtract.filteredAssets[n],pkg=asset.pkg,h=asset.header,ai=asset.assetIndex;
+  const card=document.createElement('article');card.className='sprite-package-card asset-browser-card';
   const canvas=document.createElement('canvas');canvas.className='sprite-package-preview';
-  try{drawDecodedSprite(canvas,decodeParadiseSubimage(pkg,0,0))}catch(err){canvas.width=32;canvas.height=32;canvas.style.width='96px';canvas.style.height='96px'}
-  const title=document.createElement('b');title.textContent='Package @ 0x'+pkg.offset.toString(16).toUpperCase();
-  const meta=document.createElement('small');meta.textContent=pkg.category+' · '+pkg.discovery+' · '+pkg.entryCount+' image entries · first '+h.width+'×'+h.height+' · '+(h.bpp<=3?[1,2,4,8][h.bpp]+' bpp indexed':(h.bpp===18?'24-bit RGB':'16-bit RGB'));
-  const assetRow=document.createElement('label');assetRow.className='sprite-frame-row';assetRow.textContent='Image ';
-  const assetInput=document.createElement('input');assetInput.type='number';assetInput.min='0';assetInput.max=String(pkg.entryCount-1);assetInput.value='0';assetInput.setAttribute('aria-label','Image entry index');
-  assetRow.append(assetInput,document.createTextNode(' / '+pkg.entryCount));
-  const frameRow=document.createElement('label');frameRow.className='sprite-frame-row';frameRow.textContent='Frame ';
-  const frameInput=document.createElement('input');frameInput.type='number';frameInput.min='0';frameInput.max=String(Math.max(0,Math.floor(h.count/(h.imageWidth*h.imageHeight))-1));frameInput.value='0';frameInput.setAttribute('aria-label','Frame index');
-  frameRow.append(frameInput,document.createTextNode(' / '+h.count));
-  const getSelectedHeader=()=>{const ai=Math.max(0,Math.min(pkg.entryCount-1,Number(assetInput.value)||0));return parseSpriteHeader(state.firmware.bytes,pkg.offset+readU32(state.firmware.bytes,pkg.offset+ai*4),pkg.offset+pkg.length)};
-  const refreshPreview=()=>{try{const sh=getSelectedHeader();if(!sh)throw new Error('Invalid sprite entry');assetInput.value=String(Math.max(0,Math.min(pkg.entryCount-1,Number(assetInput.value)||0)));frameInput.max=String(Math.max(0,Math.floor(sh.count/(sh.imageWidth*sh.imageHeight))-1));const frame=Math.max(0,Math.min(sh.count-1,Number(frameInput.value)||0));frameInput.value=String(frame);frameRow.lastChild.textContent=' / '+sh.count;drawDecodedSprite(canvas,decodeParadiseSubimage(pkg,Number(assetInput.value)||0,frame))}catch(err){toast('Could not decode this entry: '+err.message)}};
-  assetInput.addEventListener('change',()=>{frameInput.value='0';refreshPreview()});
-  frameInput.addEventListener('change',refreshPreview);
-  const importBtn=document.createElement('button');importBtn.className='button primary';importBtn.textContent='Import frame to Studio';
-  importBtn.onclick=()=>{try{const ai=Math.max(0,Math.min(pkg.entryCount-1,Number(assetInput.value)||0)),sh=getSelectedHeader(),fi=Math.max(0,Math.min(sh.count-1,Number(frameInput.value)||0));const decoded=decodeParadiseSubimage(pkg,ai,fi);const converted=rgbaToPixels(decoded);createSprite('Firmware '+pkg.offset.toString(16).toUpperCase()+' image '+ai+' frame '+fi,decoded.width,decoded.height,converted.pixels,converted.palette);nav('studio');toast('Decoded firmware sprite imported')}catch(err){toast('Import failed: '+err.message)}};
-  const exportBtn=document.createElement('button');exportBtn.className='button';exportBtn.textContent='Export PNG';exportBtn.onclick=()=>{try{const ai=Math.max(0,Math.min(pkg.entryCount-1,Number(assetInput.value)||0)),sh=getSelectedHeader(),fi=Math.max(0,Math.min(sh.count-1,Number(frameInput.value)||0)),d=decodeParadiseSpriteFrame(pkg,ai,fi);const cv=document.createElement('canvas');cv.width=d.width;cv.height=d.height;cv.getContext('2d').putImageData(new ImageData(d.rgba,d.width,d.height),0,0);cv.toBlob(blob=>exportBlob(blob,'paradise_sprite_'+pkg.offset.toString(16)+'_image'+ai+'_frame'+fi+'.png'))}catch(err){toast('Export failed: '+err.message)}};
-  card.append(canvas,title,meta,assetRow,frameRow,importBtn,exportBtn);grid.append(card);
+  const title=document.createElement('b');title.textContent=asset.category.toUpperCase()+' · Asset '+ai+' · 0x'+pkg.offset.toString(16).toUpperCase();
+  const meta=document.createElement('small');meta.textContent=asset.width+'×'+asset.height+' composed · '+asset.subimages+' subimage(s) · '+h.width+'×'+h.height+' tile · '+(h.bpp<=3?[1,2,4,8][h.bpp]+'bpp indexed':(h.bpp===18?'RGB888':'RGB565'))+' · '+pkg.discovery;
+  const frameRow=document.createElement('label');frameRow.className='sprite-frame-row';frameRow.textContent='Subimage ';
+  const frameInput=document.createElement('input');frameInput.type='number';frameInput.min='0';frameInput.max=String(asset.subimages-1);frameInput.value='0';frameInput.setAttribute('aria-label','Subimage index');
+  frameRow.append(frameInput,document.createTextNode(' / '+asset.subimages));
+  const paletteRow=document.createElement('label');paletteRow.className='sprite-frame-row';paletteRow.textContent='Palette ';
+  const paletteInput=document.createElement('input');paletteInput.type='number';paletteInput.min='0';paletteInput.max=String(Math.max(0,h.paletteSets-1));paletteInput.value='0';paletteInput.setAttribute('aria-label','Palette set index');
+  paletteRow.append(paletteInput,document.createTextNode(' / '+Math.max(1,h.paletteSets)));
+  const refresh=()=>{try{const fi=Math.max(0,Math.min(asset.subimages-1,Number(frameInput.value)||0)),pi=Math.max(0,Math.min(Math.max(0,h.paletteSets-1),Number(paletteInput.value)||0));frameInput.value=String(fi);paletteInput.value=String(pi);drawDecodedSprite(canvas,decodeParadiseSubimage(pkg,ai,fi,pi))}catch(err){canvas.width=32;canvas.height=32;const ctx=canvas.getContext('2d');ctx.clearRect(0,0,32,32);const label=document.createElement('small');label.textContent='Decode error';card.dataset.error=err.message}};
+  frameInput.addEventListener('change',refresh);paletteInput.addEventListener('change',refresh);
+  const importBtn=document.createElement('button');importBtn.className='button primary';importBtn.textContent='Import subimage';
+  importBtn.onclick=()=>{try{const fi=Math.max(0,Math.min(asset.subimages-1,Number(frameInput.value)||0)),pi=Math.max(0,Math.min(Math.max(0,h.paletteSets-1),Number(paletteInput.value)||0)),d=decodeParadiseSubimage(pkg,ai,fi,pi),converted=rgbaToPixels(d);createSprite('Water asset '+ai+' subimage '+fi,d.width,d.height,converted.pixels,converted.palette);nav('studio');toast('Composed subimage imported')}catch(err){toast('Import failed: '+err.message)}};
+  const exportBtn=document.createElement('button');exportBtn.className='button';exportBtn.textContent='Export composed PNG';
+  exportBtn.onclick=()=>{try{const fi=Math.max(0,Math.min(asset.subimages-1,Number(frameInput.value)||0)),pi=Math.max(0,Math.min(Math.max(0,h.paletteSets-1),Number(paletteInput.value)||0)),d=decodeParadiseSubimage(pkg,ai,fi,pi),cv=document.createElement('canvas');cv.width=d.width;cv.height=d.height;cv.getContext('2d').putImageData(new ImageData(d.rgba,d.width,d.height),0,0);cv.toBlob(blob=>exportBlob(blob,'paradise_asset_'+ai+'_subimage_'+fi+'.png'))}catch(err){toast('Export failed: '+err.message)}};
+  card.append(canvas,title,meta,frameRow,paletteRow,importBtn,exportBtn);grid.append(card);refresh();
  }
  paradiseExtract.shown=end;
- const more=$('spritePackageMore');more.hidden=end>=paradiseExtract.filtered.length;
- more.textContent='Show more packages ('+end+' of '+paradiseExtract.filtered.length+')';
- if(!paradiseExtract.filtered.length) grid.textContent='No packages match this filter.';
+ const more=$('spritePackageMore');more.hidden=end>=paradiseExtract.filteredAssets.length;
+ more.textContent='Show more assets ('+end+' of '+paradiseExtract.filteredAssets.length+')';
+ $('spritePackageCount').textContent=paradiseExtract.assets.length+' assets · '+paradiseExtract.packages.length+' packages';
+ if(!paradiseExtract.filteredAssets.length)grid.textContent='No decoded assets match this filter. Try All asset types or scan a full firmware dump.';
 }
 if($('findSpritePackagesBtn')) $('findSpritePackagesBtn').addEventListener('click',scanParadiseSpritePackages);
 if($('spritePackageSearch')) $('spritePackageSearch').addEventListener('input',()=>renderSpritePackagePage(true));
