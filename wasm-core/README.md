@@ -9,7 +9,7 @@ Implemented and covered by CI:
 - AES-128/AES-256 primitives ported from infinition/capybara (GPL-3.0-only).
 - Sonix CBC/OFB encrypted-region decryption when a user supplies the 32-bit device key; decryption operates on an in-memory copy.
 - SNC73410 PRAM, boot-ROM, SRAM, mailbox and flash storage regions.
-- Incremental Thumb-1 interpreter for common 16-bit instructions (immediate operations, shifts, ALU operations, loads/stores, branches, stack and block transfers).
+- Incremental Thumb interpreter for common 16-bit instructions plus Thumb-2 MOVW/MOVT and BL; includes immediate operations, shifts, ALU operations, loads/stores, branches, stack and block transfers.
 - Browser bindings to load a Sonix image with a supplied key, copy its declared user-code region into PRAM, validate the reset vector, and step/run instructions.
 - Unit tests for display conversion, memory regions, Sonix table parsing, AES primitives, and selected CPU instructions.
 
