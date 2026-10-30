@@ -186,10 +186,25 @@ fn load_sonix_firmware_inner(cpu:&mut BrowserCpu, bytes:&[u8], device_key:u32) -
     // Commit the validated image only after every structural check succeeds.
     cpu.memory.load_flash(&decrypted)?;
     cpu.memory.load_pram(region);
+
+    // Reproduce the two boot-info fields the retail firmware reads after the
+    // boot ROM has copied user code into PRAM.
+    let xip_base=if table.sram_code.address!=0 {
+        table.sram_code.address
+    } else {
+        table.user_code.address.wrapping_add(table.user_code.length)
+    };
+    write_mailbox_word(&mut cpu.memory,crate::memory::MAILBOX_BASE+0xF60,crate::memory::MAILBOX_BASE);
+    write_mailbox_word(&mut cpu.memory,crate::memory::MAILBOX_BASE+0x818,xip_base);
+
     cpu.cpu.reset_from_vectors(&cpu.memory,0);
     cpu.display=DisplayController::new();
     Ok(())
 }
+fn write_mailbox_word(memory:&mut MemoryStorage,address:u32,value:u32) {
+    for i in 0..4 { let _=memory.write_u8(address+i,(value>>(i*8)) as u8); }
+}
+
 impl Default for BrowserCpu {fn default()->Self{Self::new()}}
 
 #[cfg(test)]
@@ -284,6 +299,8 @@ mod browser_integration_tests {
         cpu.load_sonix_firmware(&image, 0).expect("synthetic image should load");
         assert_eq!(cpu.register(13).unwrap(), crate::memory::SRAM_BASE + crate::memory::SRAM_SIZE as u32 - 16);
         assert_eq!(cpu.register(15).unwrap(), 0x100);
+        assert_eq!(cpu.memory.read_u32(crate::memory::MAILBOX_BASE+0xF60),crate::memory::MAILBOX_BASE);
+        assert_eq!(cpu.memory.read_u32(crate::memory::MAILBOX_BASE+0x818),0x6001_1000);
         assert_eq!(cpu.run_steps(3), 3);
         assert_eq!(cpu.instructions(), 3);
         assert!(!cpu.halted());
