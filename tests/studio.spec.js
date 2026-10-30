@@ -87,6 +87,40 @@ test('keyboard zoom-dial input emits press and release events', async ({ page })
   ]);
 });
 
+test('workspace backup restores sprites, gallery drafts, preferences, and animation', async ({ page }) => {
+  const sprite = (id, name, color) => ({
+    id, name, width: 2, height: 2,
+    palette: [color],
+    pixels: [color, null, null, color]
+  });
+  const backup = {
+    format: 'paradise-mod-studio-workspace',
+    version: 1,
+    sprites: [sprite('backup-one', 'First Backup', '#ff0000'), sprite('backup-two', 'Second Backup', '#00ff00')],
+    gallery: [sprite('backup-gallery', 'Gallery Backup', '#0000ff')],
+    activeId: 'backup-two',
+    color: '#00ff00',
+    grid: false,
+    zoom: 8,
+    animation: { fps: 6, frames: [sprite('frame-one', 'Animation Frame', '#ff00ff')] }
+  };
+  await page.locator('#workspaceInput').setInputFiles({
+    name: 'workspace-backup.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(backup))
+  });
+  await expect(page.locator('#spriteCount')).toHaveText('2');
+  await expect(page.locator('#currentSpriteName')).toHaveText('SECOND BACKUP');
+  await expect(page.locator('#galleryGrid')).toContainText('Gallery Backup');
+  await expect(page.locator('#animationFrameCount')).toHaveText('1 frame');
+  await expect(page.locator('#gridToggle')).not.toBeChecked();
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('#workspaceExportBtn').click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('paradise-mod-studio-workspace.json');
+});
+
 test('local gallery imports, exports, and removes a sprite draft', async ({ page }) => {
   const project = {
     format: 'paradise-mod-studio-sprite',
