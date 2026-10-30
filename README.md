@@ -23,6 +23,14 @@ python -m http.server 8000
 
 Then open `http://localhost:8000` in a modern browser.
 
+To build a portable static website folder for hosting or sharing, run:
+
+```bash
+npm run build
+```
+
+The complete site is staged in `dist/`, including the WebAssembly worker and generated package. Serve that folder over HTTP(S); opening the HTML directly as a `file://` URL is not supported for the emulator.
+
 ## Run the browser smoke tests
 
 Node.js 22 or newer and Python 3 are recommended.
