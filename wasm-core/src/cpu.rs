@@ -350,6 +350,27 @@ mod tests {
         assert_eq!(c.r[2],0x7856_3412);
     }
     #[test]
+    fn it_eq_skips_instruction_when_condition_is_false() {
+        let mut m=MemoryStorage::new();
+        m.pram[0..2].copy_from_slice(&0xBF08u16.to_le_bytes()); // IT EQ
+        m.pram[2..4].copy_from_slice(&0x2001u16.to_le_bytes()); // MOVS r0, #1
+        let mut c=ThumbCpu::new(); c.r[15]=0; c.z=false;
+        assert!(c.step(&mut m).is_ok()); assert_eq!(c.itstate,0x08);
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[0],0); assert_eq!(c.r[15],4); assert_eq!(c.itstate,0);
+    }
+
+    #[test]
+    fn it_eq_executes_instruction_when_condition_is_true() {
+        let mut m=MemoryStorage::new();
+        m.pram[0..2].copy_from_slice(&0xBF08u16.to_le_bytes()); // IT EQ
+        m.pram[2..4].copy_from_slice(&0x2001u16.to_le_bytes()); // MOVS r0, #1
+        let mut c=ThumbCpu::new(); c.r[15]=0; c.z=true;
+        assert!(c.step(&mut m).is_ok());
+        assert!(c.step(&mut m).is_ok());
+        assert_eq!(c.r[0],1); assert_eq!(c.r[15],4); assert_eq!(c.itstate,0);
+    }
+    #[test]
     fn cpsid_and_cpsie_control_interrupt_mask() {
         let mut m=MemoryStorage::new();
         m.pram[0..2].copy_from_slice(&0xB672u16.to_le_bytes()); // CPSID i
