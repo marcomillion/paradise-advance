@@ -187,6 +187,14 @@
     let tested = 0;
     let foundKey = null;
     let failure = null;
+    const searchStartedAt = performance.now();
+    const formatEta = seconds => {
+      if (!Number.isFinite(seconds) || seconds < 0) return 'calculating…';
+      if (seconds < 60) return Math.ceil(seconds) + 's';
+      if (seconds < 3600) return Math.ceil(seconds / 60) + 'm';
+      if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ' + Math.ceil((seconds % 3600) / 60) + 'm';
+      return Math.floor(seconds / 86400) + 'd ' + Math.ceil((seconds % 86400) / 3600) + 'h';
+    };
     keySearchCancelled = false;
     activeKeyWorkers = [];
     searchBtn.disabled = true;
@@ -209,9 +217,12 @@
             const data = event.data || {};
             if (data.type === 'progress') {
               tested += Number(data.delta || 0);
+              const elapsedSeconds = Math.max(0.001, (performance.now() - searchStartedAt) / 1000);
+              const rate = tested / elapsedSeconds;
+              const eta = rate > 0 ? (keySpace - tested) / rate : Infinity;
               searchStatus.textContent = 'Parallel search: ' + tested.toLocaleString() + ' / ' + keySpace.toLocaleString() +
-                ' candidates (' + (tested * 100 / keySpace).toFixed(4) + '%). ' + lanes +
-                ' worker(s) · local only · ' + (tested / keySpace * 100).toFixed(2) + '% of key space.';
+                ' (' + (tested * 100 / keySpace).toFixed(4) + '%) · ' + Math.round(rate).toLocaleString() +
+                ' keys/s · estimated remaining ' + formatEta(eta) + ' · ' + lanes + ' worker(s) · local only.';
               return;
             }
             if (data.type === 'found') {
