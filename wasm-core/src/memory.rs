@@ -32,7 +32,7 @@ pub fn region_for(address: u32) -> RegionKind {
 pub struct MemoryStorage {
     pub pram: Vec<u8>, pub boot_rom: Vec<u8>, pub sram: Vec<u8>,
     pub mailbox: Vec<u8>, pub flash: Vec<u8>,
-    pub gpio_buttons: [bool; 3], pub dial_counter: i32,
+    pub gpio_buttons: [bool; 4], pub dial_counter: i32,
     pub dma_registers: [u32; 78], pub panel_frame: Option<Vec<u16>>, pub dma_irq_pending: bool,
     pub nvic_iser: [u32; 2],
     pub systick_ctrl: u32, pub systick_reload: u32, pub systick_current: u32, pub systick_pending: bool,
@@ -45,7 +45,7 @@ impl MemoryStorage {
         boot_rom[0x40..0x46].copy_from_slice(&[0x00,0xBF,0x01,0x20,0xFE,0xE7]);
         Self { pram:vec![0;PRAM_SIZE], boot_rom, sram:vec![0;SRAM_SIZE],
             mailbox:vec![0;MAILBOX_SIZE], flash:vec![0xFF;FLASH_SIZE],
-            gpio_buttons:[false;3], dial_counter:0,
+            gpio_buttons:[false;4], dial_counter:0,
             dma_registers:[0;78], panel_frame:None, dma_irq_pending:false, nvic_iser:[0;2],
             systick_ctrl:0, systick_reload:0, systick_current:0, systick_pending:false }
     }
