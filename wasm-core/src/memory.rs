@@ -27,8 +27,8 @@ pub fn region_for(address: u32) -> RegionKind {
     else { RegionKind::Unmapped }
 }
 
-/// Byte-addressable memory storage for the machine's mapped RAM/ROM/flash regions.
-/// MMIO registers, aliases, and CPU access timing are intentionally not emulated here yet.
+/// Byte-addressable RAM/ROM/flash plus initial GPIO and display-DMA MMIO models.
+/// This is a narrow peripheral slice, not a complete SNC73410 bus implementation.
 pub struct MemoryStorage {
     pub pram: Vec<u8>, pub boot_rom: Vec<u8>, pub sram: Vec<u8>,
     pub mailbox: Vec<u8>, pub flash: Vec<u8>,
