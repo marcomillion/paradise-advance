@@ -8,6 +8,10 @@
 export class BrowserCpu {
     free(): void;
     [Symbol.dispose](): void;
+    display_enabled(): boolean;
+    display_height(): number;
+    display_rgba_framebuffer(): Uint8Array;
+    display_width(): number;
     halted(): boolean;
     instructions(): bigint;
     last_fault(): string;
@@ -83,6 +87,10 @@ export interface InitOutput {
     readonly __wbg_browserdisplay_free: (a: number, b: number) => void;
     readonly __wbg_browserfirmwareinfo_free: (a: number, b: number) => void;
     readonly __wbg_browsermemory_free: (a: number, b: number) => void;
+    readonly browsercpu_display_enabled: (a: number) => number;
+    readonly browsercpu_display_height: (a: number) => number;
+    readonly browsercpu_display_rgba_framebuffer: (a: number) => [number, number];
+    readonly browsercpu_display_width: (a: number) => number;
     readonly browsercpu_halted: (a: number) => number;
     readonly browsercpu_instructions: (a: number) => bigint;
     readonly browsercpu_last_fault: (a: number) => [number, number];

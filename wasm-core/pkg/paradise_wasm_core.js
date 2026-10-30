@@ -18,6 +18,36 @@ export class BrowserCpu {
     /**
      * @returns {boolean}
      */
+    display_enabled() {
+        const ret = wasm.browsercpu_display_enabled(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * @returns {number}
+     */
+    display_height() {
+        const ret = wasm.browsercpu_display_height(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {Uint8Array}
+     */
+    display_rgba_framebuffer() {
+        const ret = wasm.browsercpu_display_rgba_framebuffer(this.__wbg_ptr);
+        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v1;
+    }
+    /**
+     * @returns {number}
+     */
+    display_width() {
+        const ret = wasm.browsercpu_display_width(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {boolean}
+     */
     halted() {
         const ret = wasm.browsercpu_halted(this.__wbg_ptr);
         return ret !== 0;
