@@ -190,6 +190,16 @@ impl ThumbCpu {
             },
             0x9000..=0x9FFF => { let d=((op>>8)&7) as usize; let addr=self.r[13].wrapping_add(((op&0xff) as u32)*4); if op&0x0800!=0 {self.r[d]=m.read_u32(addr);} else {let v=self.r[d];for i in 0..4 {m.write_u8(addr+i,(v>>(i*8)) as u8);}} },
             0xA000..=0xAFFF => { let d=((op>>8)&7) as usize; self.r[d]=((pc.wrapping_add(4))&!3).wrapping_add(((op&0xff) as u32)*4); },
+            0xB100..=0xBFFF if (op&0xF500)==0xB100 => {
+                // CBZ/CBNZ: forward-only branch based on a low register.
+                let source=(op&7) as usize;
+                let nonzero=op&0x0800!=0;
+                let should_branch=if nonzero {self.r[source]!=0} else {self.r[source]==0};
+                if should_branch {
+                    let offset=(((op>>9)&1) as u32)<<6 | (((op>>3)&0x1F) as u32)<<1;
+                    self.r[15]=pc.wrapping_add(4).wrapping_add(offset);
+                }
+            },
             0xB200..=0xB2FF => {
                 let kind=op&0xFFC0;
                 let source=((op>>3)&7) as usize;
@@ -247,6 +257,16 @@ mod tests {
         assert!(c.step(&mut m).is_ok());
         assert_eq!(c.r[0],0xF800_0000);
         assert!(c.n); assert!(!c.z);
+    }
+    #[test]
+    fn executes_cbz_and_cbnz_forward_branches() {
+        let mut m=MemoryStorage::new();
+        // CBZ r0, +2; CBNZ r1, +2
+        m.write_u8(0,0x08); m.write_u8(1,0xB1);
+        m.write_u8(6,0x08); m.write_u8(7,0xB9);
+        let mut c=ThumbCpu::new(); c.r[15]=0; c.r[0]=0; c.r[1]=1;
+        assert!(c.step(&mut m).is_ok()); assert_eq!(c.r[15],6);
+        assert!(c.step(&mut m).is_ok()); assert_eq!(c.r[15],12);
     }
     #[test]
     fn executes_sxtb_and_rev_register_instructions() {
