@@ -36,16 +36,16 @@ pub enum CpuFault { UnsupportedInstruction(u16), InvalidExecutionAddress(u32), H
 pub struct ThumbCpu {
     pub r: [u32; 16],
     pub n: bool, pub z: bool, pub c: bool, pub v: bool,
-    pub instructions: u64, pub halted: bool, pub last_fault: Option<CpuFault>, in_irq: bool, primask: bool, itstate: u8, ipsr: u32,
+    pub instructions: u64, pub halted: bool, pub last_fault: Option<CpuFault>, in_irq: bool, primask: bool, itstate: u8, ipsr: u32, exclusive_address: Option<u32>,
 }
 impl ThumbCpu {
     pub fn new() -> Self {
-        Self { r:[0;16], n:false,z:false,c:false,v:false,instructions:0,halted:false,last_fault:None,in_irq:false,primask:false,itstate:0,ipsr:0 }
+        Self { r:[0;16], n:false,z:false,c:false,v:false,instructions:0,halted:false,last_fault:None,in_irq:false,primask:false,itstate:0,ipsr:0,exclusive_address:None }
     }
     pub fn reset_from_vectors(&mut self, memory:&MemoryStorage, vector_base:u32) {
         self.r=[0;16]; self.r[13]=memory.read_u32(vector_base);
         self.r[15]=memory.read_u32(vector_base.wrapping_add(4)) & !1;
-        self.halted=false; self.last_fault=None; self.instructions=0; self.in_irq=false; self.primask=false; self.itstate=0; self.ipsr=0;
+        self.halted=false; self.last_fault=None; self.instructions=0; self.in_irq=false; self.primask=false; self.itstate=0; self.ipsr=0; self.exclusive_address=None;
     }
     fn set_nz(&mut self, value:u32) { self.n=value>>31!=0; self.z=value==0; }
     fn set_add_flags(&mut self,a:u32,b:u32,result:u32) { self.set_nz(result); self.c=(a as u64+b as u64)>u32::MAX as u64; self.v=(!(a^b)&(a^result)&0x8000_0000)!=0; }
@@ -67,6 +67,23 @@ impl ThumbCpu {
             let table=base.wrapping_add(if is_tbh {self.r[rm].wrapping_mul(2)}else{self.r[rm]});
             let offset=if is_tbh {m.read_u8(table) as u32|((m.read_u8(table+1) as u32)<<8)}else{m.read_u8(table) as u32};
             self.r[15]=self.r[15].wrapping_add(offset<<1);
+            self.instructions=self.instructions.wrapping_add(1);return Ok(());
+        }
+        // LDREX / STREX word exclusives. The single-core monitor is intentionally minimal.
+        if (op1&0xFFF0)==0xE850 && (op2&0x0F00)==0x0F00 {
+            let rn=(op1&0xF) as usize;let rt=((op2>>12)&0xF) as usize;
+            let address=self.r[rn].wrapping_add(((op2&0xFF) as u32)<<2);
+            self.r[rt]=m.read_u32(address);self.exclusive_address=Some(address);
+            self.instructions=self.instructions.wrapping_add(1);return Ok(());
+        }
+        if (op1&0xFFF0)==0xE840 && (op2&0x0F00)!=0x0F00 {
+            let rn=(op1&0xF) as usize;let rd=((op2>>8)&0xF) as usize;let rt=((op2>>12)&0xF) as usize;
+            let address=self.r[rn].wrapping_add(((op2&0xFF) as u32)<<2);
+            if self.exclusive_address==Some(address) {
+                let value=self.r[rt];for i in 0..4 {m.write_u8(address+i,(value>>(i*8)) as u8);}
+                self.r[rd]=0;
+            } else {self.r[rd]=1;}
+            self.exclusive_address=None;
             self.instructions=self.instructions.wrapping_add(1);return Ok(());
         }
         // LDRD / STRD immediate, including pre/post-index and optional writeback.
@@ -745,6 +762,18 @@ mod tests {
         assert_eq!(m.read_u32(0x100),0x1111);assert_eq!(m.read_u32(0x104),0x2222);
         assert!(c.step(&mut m).is_ok());assert_eq!(c.r[3],0x108);
         assert_eq!(c.r[4],0x1111);assert_eq!(c.r[5],0x2222);
+    }
+    #[test]
+    fn executes_ldrex_and_strex_with_single_core_monitor() {
+        let mut m=MemoryStorage::new();
+        // LDREX r0, [r1]; STREX r2, r3, [r1]
+        m.write_u8(0,0x51);m.write_u8(1,0xE8);m.write_u8(2,0x0F);m.write_u8(3,0x00);
+        m.write_u8(4,0x41);m.write_u8(5,0xE8);m.write_u8(6,0x00);m.write_u8(7,0x20);
+        let mut c=ThumbCpu::new();c.r[15]=0;c.r[1]=0x100;c.r[3]=0xABCD_1234;
+        m.write_u8(0x100,0x78);m.write_u8(0x101,0x56);m.write_u8(0x102,0x34);m.write_u8(0x103,0x12);
+        assert!(c.step(&mut m).is_ok());assert_eq!(c.r[0],0x1234_5678);
+        assert!(c.step(&mut m).is_ok());assert_eq!(c.r[2],0);
+        assert_eq!(m.read_u32(0x100),0xABCD_1234);
     }
     #[test]
     fn executes_thumb2_ldrd_and_tbb() {
