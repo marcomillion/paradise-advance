@@ -167,6 +167,7 @@
   });
   let activeKeyWorkers = [];
   let keySearchCancelled = false;
+  let cancelActiveKeySearch = null;
   $('searchDeviceKeyBtn')?.addEventListener('click', async () => {
     const searchStatus = $('deviceKeySearchStatus');
     if (!firmwareBytes || !firmwareInfo) {
@@ -180,7 +181,7 @@
     const searchBtn = $('searchDeviceKeyBtn');
     const cancelBtn = $('cancelDeviceKeySearchBtn');
     const keySpace = 4294967296;
-    const lanes = Math.max(1, Math.min(8, (Number(navigator.hardwareConcurrency) || 2) - 1));
+    const lanes = Math.max(1, Math.min(4, (Number(navigator.hardwareConcurrency) || 2) - 1));
     const chunkSize = 250000;
     let finished = 0;
     let tested = 0;
@@ -197,6 +198,7 @@
     };
     try {
       await new Promise((resolve, reject) => {
+        cancelActiveKeySearch = () => { keySearchCancelled = true; terminateWorkers(); resolve(); };
         const bytes = firmwareBytes;
         const workers = [];
         for (let lane = 0; lane < lanes; lane++) {
@@ -253,13 +255,15 @@
         : 'Key search failed: ' + (error.message || String(error));
     } finally {
       terminateWorkers();
+      cancelActiveKeySearch = null;
       searchBtn.disabled = false;
       cancelBtn.disabled = true;
     }
   });
   $('cancelDeviceKeySearchBtn')?.addEventListener('click', async () => {
-    $('cancelDeviceKeySearchBtn').disabled=true;
-    try { await request('cancel-key-search'); } catch (_) {}
+    $('cancelDeviceKeySearchBtn').disabled = true;
+    if (cancelActiveKeySearch) cancelActiveKeySearch();
+    else { try { await request('cancel-key-search'); } catch (_) {} }
   });
   // Keyboard and pointer-drag dial events are emitted by the shared device UI.
   // Pointer buttons and the mouse wheel are handled below to avoid duplicate edges.
