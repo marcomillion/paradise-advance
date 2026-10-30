@@ -41,6 +41,23 @@ impl ThumbCpu {
             else { self.r[rd]=(self.r[rd]&0xffff)|(imm<<16); }
             self.instructions=self.instructions.wrapping_add(1); return Ok(());
         }
+        // Common Thumb-2 immediate memory transfers: LDR/STR word, halfword and byte.
+        let transfer = op1 & 0xFFF0;
+        if matches!(transfer, 0xF8D0 | 0xF8C0 | 0xF890 | 0xF880 | 0xF8B0 | 0xF8A0) {
+            let rn=(op1&15) as usize;
+            let rt=((op2>>12)&15) as usize;
+            let address=self.r[rn].wrapping_add((op2&0x0fff) as u32);
+            match transfer {
+                0xF8D0 => { let value=m.read_u32(address); if rt==15 {self.r[15]=value&!1;} else {self.r[rt]=value;} },
+                0xF8C0 => { let value=self.r[rt]; for i in 0..4 {m.write_u8(address+i,(value>>(i*8)) as u8);} },
+                0xF890 => { self.r[rt]=m.read_u8(address) as u32; },
+                0xF880 => { m.write_u8(address,self.r[rt] as u8); },
+                0xF8B0 => { self.r[rt]=m.read_u8(address) as u32|((m.read_u8(address+1) as u32)<<8); },
+                0xF8A0 => { let value=self.r[rt];m.write_u8(address,value as u8);m.write_u8(address+1,(value>>8) as u8); },
+                _=>{}
+            }
+            self.instructions=self.instructions.wrapping_add(1); return Ok(());
+        }
         // BL (Thumb-2): reconstruct the signed 25-bit PC-relative displacement.
         if (op1&0xF800)==0xF000 && (op2&0xD000)==0xD000 {
             let s=((op1>>10)&1) as u32;
