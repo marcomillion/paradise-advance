@@ -274,6 +274,11 @@ impl MemoryStorage {
     pub fn write_u32(&mut self,address:u32,value:u32)->bool {
         if (0x4000_E000..=0x4000_E01F).contains(&address) {
             if address&3!=0 { return false; }
+            // Keep the broad bus counters consistent for aligned word writes,
+            // which bypass write_u8 for the SPI register block.
+            self.peripheral_write_count=self.peripheral_write_count.wrapping_add(4);
+            self.peripheral_last_write_address=address.wrapping_add(3);
+            self.peripheral_last_write_value=(value>>24)&0xFF;
             self.spi_write_reg(address-0x4000_E000,value); return true;
         }
         if let Some((target,bit))=Self::bitband_target(address) {
@@ -476,6 +481,18 @@ mod tests {
         assert!(m.write_u32(alias,0));
         assert_eq!(m.read_u8(target),0);
         assert_eq!(m.read_u32(alias),0);
+    }
+    #[test]
+    fn cpu_peripheral_reads_and_word_writes_are_traced() {
+        let mut m=MemoryStorage::new();
+        assert!(m.write_u32(0x4000_E000,0x12345678));
+        assert_eq!(m.peripheral_write_count,4);
+        assert_eq!(m.peripheral_last_write_address,0x4000_E003);
+        assert_eq!(m.peripheral_last_write_value,0x12);
+        let _=m.read_cpu_u32(0x4000_E000);
+        assert_eq!(m.peripheral_read_count,1);
+        assert_eq!(m.peripheral_last_read_address,0x4000_E000);
+        assert_eq!(m.peripheral_last_read_value,0x12345678);
     }
     #[test]
     fn spi0_control_status_and_data_registers_are_mapped() {
