@@ -42,6 +42,7 @@ pub struct MemoryStorage {
     pub dma_transfer_attempts: u64, pub dma_last_source: u32, pub dma_last_destination: u32, pub dma_last_units: u32,
     pub peripheral_write_count: u64, pub peripheral_last_write_address: u32, pub peripheral_last_write_value: u32,
     pub peripheral_read_count: u64, pub peripheral_last_read_address: u32, pub peripheral_last_read_value: u32,
+    pub peripheral_trace: Vec<u32>,
     pub nvic_iser: [u32; 2],
     pub systick_ctrl: u32, pub systick_reload: u32, pub systick_current: u32, pub systick_pending: bool,
 }
@@ -61,7 +62,7 @@ impl MemoryStorage {
             dma_write_count:0, dma_last_write_address:0, dma_last_write_value:0,
             dma_transfer_attempts:0, dma_last_source:0, dma_last_destination:0, dma_last_units:0,
             peripheral_write_count:0, peripheral_last_write_address:0, peripheral_last_write_value:0,
-            peripheral_read_count:0, peripheral_last_read_address:0, peripheral_last_read_value:0, nvic_iser:[0;2],
+            peripheral_read_count:0, peripheral_last_read_address:0, peripheral_last_read_value:0, peripheral_trace:Vec::new(), nvic_iser:[0;2],
             systick_ctrl:0, systick_reload:0, systick_current:0, systick_pending:false }
     }
     pub fn load_pram(&mut self, bytes: &[u8]) {
@@ -73,6 +74,14 @@ impl MemoryStorage {
         if bytes.len() != FLASH_SIZE { return Err("flash dump must be exactly 16 MiB"); }
         self.flash.copy_from_slice(bytes); Ok(())
     }
+    fn trace_peripheral(&mut self, operation:u32, address:u32, value:u32) {
+        self.peripheral_trace.extend_from_slice(&[operation,address,value]);
+        if self.peripheral_trace.len()>96 {
+            let excess=self.peripheral_trace.len()-96;
+            self.peripheral_trace.drain(0..excess);
+        }
+    }
+    pub fn peripheral_trace(&self)->Vec<u32> { self.peripheral_trace.clone() }
     pub fn set_button(&mut self, index: usize, pressed: bool) -> bool {
         if index >= self.gpio_buttons.len() { return false; }
         self.gpio_buttons[index] = pressed; true
@@ -244,6 +253,7 @@ impl MemoryStorage {
             self.peripheral_read_count=self.peripheral_read_count.wrapping_add(1);
             self.peripheral_last_read_address=address;
             self.peripheral_last_read_value=value as u32;
+            self.trace_peripheral(0,address,value as u32);
         }
         if (0xE000_E010..0xE000_E014).contains(&address) {
             self.systick_ctrl &= !(1 << 16);
@@ -257,6 +267,7 @@ impl MemoryStorage {
             self.peripheral_read_count=self.peripheral_read_count.wrapping_add(1);
             self.peripheral_last_read_address=address;
             self.peripheral_last_read_value=value;
+            self.trace_peripheral(0,address,value);
         }
         if address == 0xE000_E010 {
             self.systick_ctrl &= !(1 << 16);
@@ -298,6 +309,7 @@ impl MemoryStorage {
             self.peripheral_write_count=self.peripheral_write_count.wrapping_add(1);
             self.peripheral_last_write_address=address;
             self.peripheral_last_write_value=value as u32;
+            self.trace_peripheral(1,address,value as u32);
         }
         if (0x4000_E000..=0x4000_E01F).contains(&address) {
             let shift=(address&3)*8;let offset=(address-0x4000_E000)&!3;
