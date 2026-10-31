@@ -123,8 +123,14 @@
     canvas.style.height = (frame.height * scale) + 'px';
     const busTrace = Array.from(frame.peripheralTrace || []);
     const busTraceText = [];
-    for (let i = Math.max(0, busTrace.length - 36); i + 2 < busTrace.length; i += 3) {
-      busTraceText.push((busTrace[i] === 1 ? 'W ' : 'R ') + formatHex(busTrace[i + 1]) + ' = ' + formatHex(busTrace[i + 2]));
+    for (let i = Math.max(0, busTrace.length - 96); i + 2 < busTrace.length; i += 3) {
+      const address = Number(busTrace[i + 1]) >>> 0;
+      const label = address === 0x45000100 ? ' [SYS1 PCLK_EN?]' :
+        address === 0x45000108 ? ' [SYS1 PERI_CLKCTL?]' :
+        address === 0x4500010C ? ' [SYS1 PCLK_RST?]' :
+        (address >= 0x45000100 && address < 0x45000200) ? ' [SYS1]' :
+        (address >= 0x45000000 && address < 0x45000100) ? ' [SYS0]' : '';
+      busTraceText.push((busTrace[i] === 1 ? 'W ' : 'R ') + formatHex(address) + label + ' = ' + formatHex(busTrace[i + 2]));
     }
     if (inputStatus) inputStatus.textContent = 'LCD diagnostics · DMA frames: ' + Number(frame.framesReceived || 0).toLocaleString() + ' · non-black pixels: ' + Number(frame.nonzeroPixels || 0).toLocaleString() + ' / ' + (frame.width * frame.height).toLocaleString() + ' · pixel checksum: 0x' + (Number(frame.pixelChecksum || 0) >>> 0).toString(16).toUpperCase().padStart(8, '0') + ' · DMA writes: ' + Number(frame.dmaDiagnostics?.[0] || 0).toLocaleString() + ' · last DMA MMIO: ' + formatHex(frame.dmaDiagnostics?.[1] || 0) + ' = ' + formatHex(frame.dmaDiagnostics?.[2] || 0) + ' · transfer attempts: ' + Number(frame.dmaDiagnostics?.[3] || 0).toLocaleString() + ' · last transfer: src ' + formatHex(frame.dmaDiagnostics?.[4] || 0) + ' → dst ' + formatHex(frame.dmaDiagnostics?.[5] || 0) + ' · units ' + Number(frame.dmaDiagnostics?.[6] || 0).toLocaleString() + ' · all peripheral writes: ' + Number(frame.peripheralDiagnostics?.[0] || 0).toLocaleString() + ' · last peripheral MMIO: ' + formatHex(frame.peripheralDiagnostics?.[1] || 0) + ' = ' + formatHex(frame.peripheralDiagnostics?.[2] || 0) + ' · SPI TX words: ' + Number(frame.peripheralDiagnostics?.[3] || 0).toLocaleString() + ' · peripheral reads: ' + Number(frame.peripheralDiagnostics?.[5] || 0).toLocaleString() + ' · last peripheral read: ' + formatHex(frame.peripheralDiagnostics?.[6] || 0) + ' = ' + formatHex(frame.peripheralDiagnostics?.[7] || 0) + ' · recent bus trace: ' + (busTraceText.join(' | ') || 'none');
   }
