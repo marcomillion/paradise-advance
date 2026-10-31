@@ -233,6 +233,7 @@
     try {
       const r = await request('step');
       await refreshFirmwareFrame();
+      showCpuRegisters(r.snapshot); showCodeWindow(r.codeWindow, r.pc);
       setStatus(r.sleeping ? 'CPU waiting for interrupt/event' : 'CPU instruction executed', 'Instructions: ' + r.instructions + ' · PC ' + formatHex(r.pc) + ' · halted: ' + r.halted + ' · sleeping: ' + Boolean(r.sleeping) + (r.halted ? ' · fault: ' + r.fault : '') + '. Display output is experimental; DMA and LCD behavior are only partially modeled.');
       if (r.halted) { $('emulatorStepBtn').disabled = true; $('emulatorRunBtn').disabled = true; }
     } catch (error) {
