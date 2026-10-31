@@ -26,7 +26,7 @@
     if (initPromise) return initPromise;
     initPromise = new Promise((resolve, reject) => {
       try {
-        worker = new Worker('wasm-core/browser-worker.js?v=4f09ff9', { type: 'module' });
+        worker = new Worker('wasm-core/browser-worker.js?v=0864f919', { type: 'module' });
       } catch (error) {
         worker = null; initPromise = null; reject(error); return;
       }
