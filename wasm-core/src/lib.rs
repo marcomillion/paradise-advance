@@ -129,9 +129,11 @@ impl BrowserCpu {
     /// This is a raw code window, not a disassembler: 32-bit Thumb instructions occupy two entries.
     pub fn execution_window(&self)->Vec<u32> {
         let pc=self.cpu.r[15]&!1;
-        let start=pc.saturating_sub(16)&!1;
-        let mut out=Vec::with_capacity(34);
-        for index in 0..17u32 {
+        // Keep a wider window before the PC so table-branch setup and
+        // the instructions that lead into a wait loop can be inspected.
+        let start=pc.saturating_sub(64)&!1;
+        let mut out=Vec::with_capacity(82);
+        for index in 0..41u32 {
             let address=start.wrapping_add(index*2);
             let opcode=self.memory.read_u8(address) as u32
                 | ((self.memory.read_u8(address.wrapping_add(1)) as u32)<<8);
