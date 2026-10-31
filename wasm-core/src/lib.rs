@@ -179,6 +179,7 @@ impl BrowserCpu {
     pub fn display_pixel_checksum(&self)->u32 {self.display.pixel_checksum()}
     pub fn dma_diagnostics(&self)->Vec<u32> { let (w,a,v,t,s,d,n)=self.memory.dma_diagnostics(); vec![w as u32,a,v,t as u32,s,d,n] }
     pub fn peripheral_diagnostics(&self)->Vec<u32> { let (w,a,v,spi,dma,r,ra,rv)=self.memory.peripheral_diagnostics(); vec![w as u32,a,v,spi as u32,dma as u32,r as u32,ra,rv] }
+    pub fn peripheral_trace(&self)->Vec<u32> { self.memory.peripheral_trace() }
     pub fn instructions(&self)->u64 {self.cpu.instructions}
     pub fn halted(&self)->bool {self.cpu.halted}
     pub fn sleeping(&self)->bool {self.cpu.is_sleeping()}
