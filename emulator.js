@@ -55,7 +55,7 @@
       const marker = address === (Number(currentPc) >>> 0) ? '→ ' : '  ';
       rows.push(marker + formatHex(address) + '  0x' + opcode.toString(16).toUpperCase().padStart(4, '0'));
     }
-    panel.textContent = rows.join('\\n') + '\\n\\nRaw Thumb halfwords; 32-bit instructions use two rows.';
+    panel.textContent = rows.join('\n') + '\n\nRaw Thumb halfwords; 32-bit instructions use two rows.';
   }
   function failAll(message) {
     for (const [, entry] of pending) entry.reject(new Error(message));
