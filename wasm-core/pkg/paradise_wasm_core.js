@@ -25,8 +25,29 @@ export class BrowserCpu {
     /**
      * @returns {number}
      */
+    display_frames_received() {
+        const ret = wasm.browsercpu_display_frames_received(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
     display_height() {
         const ret = wasm.browsercpu_display_height(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
+    display_nonzero_pixels() {
+        const ret = wasm.browsercpu_display_nonzero_pixels(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
+    display_pixel_checksum() {
+        const ret = wasm.browsercpu_display_pixel_checksum(this.__wbg_ptr);
         return ret >>> 0;
     }
     /**
