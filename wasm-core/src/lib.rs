@@ -132,8 +132,10 @@ impl BrowserCpu {
         // Keep a wider window before the PC so table-branch setup and
         // the instructions that lead into a wait loop can be inspected.
         let start=pc.saturating_sub(64)&!1;
-        let mut out=Vec::with_capacity(82);
-        for index in 0..41u32 {
+        // Show enough instructions ahead of the current PC to inspect
+        // nearby branch targets and jump-table destinations.
+        let mut out=Vec::with_capacity(130);
+        for index in 0..65u32 {
             let address=start.wrapping_add(index*2);
             let opcode=self.memory.read_u8(address) as u32
                 | ((self.memory.read_u8(address.wrapping_add(1)) as u32)<<8);
