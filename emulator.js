@@ -20,10 +20,12 @@
   function showCpuRegisters(snapshot) {
     const panel = $('cpuRegistersStatus');
     if (!panel) return;
-    if (!Array.isArray(snapshot) || snapshot.length < 19) {
-      panel.textContent = 'CPU registers unavailable — reload the page and run a batch again.';
+    // wasm-bindgen may expose Vec<u32> as Uint32Array rather than Array.
+    if (snapshot == null || typeof snapshot.length !== 'number' || snapshot.length < 19) {
+      panel.textContent = 'CPU register snapshot missing — run another CPU batch and check the browser console if this persists.';
       return;
     }
+    snapshot = Array.from(snapshot);
     const hex = value => formatHex(value);
     panel.textContent = [
       'R0  ' + hex(snapshot[0]), 'R1  ' + hex(snapshot[1]),
