@@ -40,6 +40,7 @@ pub struct MemoryStorage {
     pub dma_registers: [u32; 78], pub panel_frame: Option<Vec<u16>>, pub dma_irq_pending: bool,
     pub dma_write_count: u64, pub dma_last_write_address: u32, pub dma_last_write_value: u32,
     pub dma_transfer_attempts: u64, pub dma_last_source: u32, pub dma_last_destination: u32, pub dma_last_units: u32,
+    pub peripheral_write_count: u64, pub peripheral_last_write_address: u32, pub peripheral_last_write_value: u32,
     pub nvic_iser: [u32; 2],
     pub systick_ctrl: u32, pub systick_reload: u32, pub systick_current: u32, pub systick_pending: bool,
 }
@@ -57,7 +58,8 @@ impl MemoryStorage {
             spi_registers:[0,2,5,0,0,0,0,0], spi_last_tx:0, spi_tx_words:0,
             dma_registers:[0;78], panel_frame:None, dma_irq_pending:false,
             dma_write_count:0, dma_last_write_address:0, dma_last_write_value:0,
-            dma_transfer_attempts:0, dma_last_source:0, dma_last_destination:0, dma_last_units:0, nvic_iser:[0;2],
+            dma_transfer_attempts:0, dma_last_source:0, dma_last_destination:0, dma_last_units:0,
+            peripheral_write_count:0, peripheral_last_write_address:0, peripheral_last_write_value:0, nvic_iser:[0;2],
             systick_ctrl:0, systick_reload:0, systick_current:0, systick_pending:false }
     }
     pub fn load_pram(&mut self, bytes: &[u8]) {
@@ -273,6 +275,13 @@ impl MemoryStorage {
         accepted
     }
     pub fn write_u8(&mut self, address: u32, value: u8) -> bool {
+        // Broad bus trace: identify the real peripheral block used by firmware before
+        // assuming the LCD/DMA address map. Count each byte lane written.
+        if (0x4000_0000..0x5000_0000).contains(&address) {
+            self.peripheral_write_count=self.peripheral_write_count.wrapping_add(1);
+            self.peripheral_last_write_address=address;
+            self.peripheral_last_write_value=value as u32;
+        }
         if (0x4000_E000..=0x4000_E01F).contains(&address) {
             let shift=(address&3)*8;let offset=(address-0x4000_E000)&!3;
             if offset==0x18 { self.spi_write_reg(offset,(value as u32)<<shift); }
@@ -374,6 +383,9 @@ impl MemoryStorage {
     }
     pub fn dma_diagnostics(&self) -> (u64,u32,u32,u64,u32,u32,u32) {
         (self.dma_write_count,self.dma_last_write_address,self.dma_last_write_value,self.dma_transfer_attempts,self.dma_last_source,self.dma_last_destination,self.dma_last_units)
+    }
+    pub fn peripheral_diagnostics(&self) -> (u64,u32,u32,u64,u64) {
+        (self.peripheral_write_count,self.peripheral_last_write_address,self.peripheral_last_write_value,self.spi_tx_words,self.dma_write_count)
     }
 }
 impl Default for MemoryStorage { fn default() -> Self { Self::new() } }
