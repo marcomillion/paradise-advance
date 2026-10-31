@@ -224,3 +224,35 @@ test('animation timeline is restored after reloading the workspace', async ({ pa
   await expect(page.locator('#animationFps')).toHaveValue('7');
   await expect(page.locator('#animationPreviewLabel')).toHaveText('Frame 1 of 1');
 });
+
+
+test('imported animation projects survive a browser reload', async ({ page }) => {
+  await page.locator('#spriteInput').setInputFiles({
+    name: 'test-animation.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
+      format: 'paradise-mod-studio-animation',
+      version: 1,
+      fps: 6,
+      frames: [{
+        name: 'Imported frame',
+        width: 2,
+        height: 2,
+        pixels: ['#ff0000', null, null, '#00ff00'],
+        palette: ['#ff0000', '#00ff00']
+      }]
+    }))
+  });
+
+  await expect(page.locator('#animationFrameCount')).toHaveText('1 frame');
+  await expect(page.locator('#animationFps')).toHaveValue('6');
+  await page.waitForFunction(() => {
+    const saved = JSON.parse(localStorage.getItem('paradiseModStudio.workspace.v1') || '{}');
+    return saved.animation?.frames?.[0]?.name === 'Imported frame';
+  });
+
+  await page.reload();
+  await expect(page.locator('#animationFrameCount')).toHaveText('1 frame');
+  await expect(page.locator('#animationFps')).toHaveValue('6');
+  await expect(page.locator('#animationPreviewLabel')).toHaveText('Frame 1 of 1');
+});
