@@ -183,6 +183,7 @@
     $('emulatorStartCpuBtn').disabled = true;
     $('emulatorStepBtn').disabled = true;
     $('emulatorRunBtn').disabled = true;
+    $('emulatorRunToPcBtn').disabled = true;
     try {
       setStatus('Reading firmware locally…', 'The dump stays in this browser tab. Nothing is uploaded.');
       const bytes = new Uint8Array(await file.arrayBuffer());
@@ -216,6 +217,7 @@
       await refreshFirmwareFrame();
       $('emulatorStepBtn').disabled = false;
       $('emulatorRunBtn').disabled = false;
+      $('emulatorRunToPcBtn').disabled = false;
       setStatus('CPU loaded · not yet a complete emulator',
         'The firmware user-code region was decrypted and copied into PRAM. Initial SP ' + formatHex(result.initialSp) +
         ', reset PC ' + formatHex(result.initialPc) + '. The Thumb interpreter and hardware models are partial: GPIO, SysTick, SPI, DMA, and LCD signaling have initial models, but the retail chip’s full MMIO map and LCD protocol are not yet verified. Step/run may stop on an unsupported instruction.');
@@ -248,6 +250,37 @@
     } catch (error) {
       setStatus('CPU stopped', error.message || String(error));
       $('emulatorStepBtn').disabled = true; $('emulatorRunBtn').disabled = true;
+    }
+  });
+    $('emulatorRunToPcBtn')?.addEventListener('click', async () => {
+    if (!cpuLoaded) return;
+    const raw = ($('emulatorBreakpointPc')?.value || '').trim().replace(/^0x/i, '');
+    if (!/^[0-9a-fA-F]{1,8}$/.test(raw)) {
+      setStatus('Invalid breakpoint address', 'Enter a hexadecimal PC address, for example 0x0000B930.');
+      return;
+    }
+    const address = Number.parseInt(raw, 16) >>> 0;
+    const button = $('emulatorRunToPcBtn');
+    button.disabled = true;
+    try {
+      const r = await request('run-until-pc', { address, maxSteps: 1000000 });
+      await refreshFirmwareFrame();
+      showCpuRegisters(r.snapshot);
+      showCodeWindow(r.codeWindow, r.pc);
+      const detail = r.reached
+        ? 'Breakpoint reached before executing ' + formatHex(address) + '.'
+        : 'Breakpoint not reached within 1,000,000 instructions.';
+      setStatus(r.reached ? 'Breakpoint hit · CPU paused' : 'Run-to-PC finished', detail +
+        ' Executed ' + r.executed + ' instruction(s) · total ' + r.instructions +
+        ' · PC ' + formatHex(r.pc) + ' · halted: ' + r.halted +
+        (r.halted ? ' · fault: ' + r.fault : '') +
+        '. The CPU is stopped; use Step instruction or Run batch to continue.');
+      if (r.halted) { $('emulatorStepBtn').disabled = true; $('emulatorRunBtn').disabled = true; }
+    } catch (error) {
+      setStatus('CPU stopped', error.message || String(error));
+      $('emulatorStepBtn').disabled = true; $('emulatorRunBtn').disabled = true;
+    } finally {
+      button.disabled = !cpuLoaded;
     }
   });
   let activeKeyWorkers = [];
