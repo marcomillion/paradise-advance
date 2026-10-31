@@ -14,6 +14,7 @@ export const browsercpu_display_rgba_framebuffer: (a: number) => [number, number
 export const browsercpu_display_width: (a: number) => number;
 export const browsercpu_dma_diagnostics: (a: number) => [number, number];
 export const browsercpu_execution_snapshot: (a: number) => [number, number];
+export const browsercpu_execution_window: (a: number) => [number, number];
 export const browsercpu_halted: (a: number) => number;
 export const browsercpu_instructions: (a: number) => bigint;
 export const browsercpu_last_fault: (a: number) => [number, number];

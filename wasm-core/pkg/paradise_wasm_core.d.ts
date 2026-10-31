@@ -16,10 +16,13 @@ export class BrowserCpu {
     display_rgba_framebuffer(): Uint8Array;
     display_width(): number;
     dma_diagnostics(): Uint32Array;
+    execution_snapshot(): Uint32Array;
     /**
      * Snapshot core registers and the next Thumb instruction for browser-side diagnosis.
+     * Return nearby Thumb halfwords as address/opcode pairs around the current PC.
+     * This is a raw code window, not a disassembler: 32-bit Thumb instructions occupy two entries.
      */
-    execution_snapshot(): Uint32Array;
+    execution_window(): Uint32Array;
     halted(): boolean;
     instructions(): bigint;
     last_fault(): string;
@@ -113,6 +116,7 @@ export interface InitOutput {
     readonly browsercpu_display_width: (a: number) => number;
     readonly browsercpu_dma_diagnostics: (a: number) => [number, number];
     readonly browsercpu_execution_snapshot: (a: number) => [number, number];
+    readonly browsercpu_execution_window: (a: number) => [number, number];
     readonly browsercpu_halted: (a: number) => number;
     readonly browsercpu_instructions: (a: number) => bigint;
     readonly browsercpu_last_fault: (a: number) => [number, number];
