@@ -17,6 +17,28 @@
     if (title) title.textContent = heading;
     if (status) status.textContent = message;
   }
+  function showCpuRegisters(snapshot) {
+    const panel = $('cpuRegistersStatus');
+    if (!panel) return;
+    if (!Array.isArray(snapshot) || snapshot.length < 19) {
+      panel.textContent = 'CPU registers unavailable — reload the page and run a batch again.';
+      return;
+    }
+    const hex = value => formatHex(value);
+    panel.textContent = [
+      'R0  ' + hex(snapshot[0]), 'R1  ' + hex(snapshot[1]),
+      'R2  ' + hex(snapshot[2]), 'R3  ' + hex(snapshot[3]),
+      'R4  ' + hex(snapshot[4]), 'R5  ' + hex(snapshot[5]),
+      'R6  ' + hex(snapshot[6]), 'R7  ' + hex(snapshot[7]),
+      'R8  ' + hex(snapshot[8]), 'R9  ' + hex(snapshot[9]),
+      'R10 ' + hex(snapshot[10]), 'R11 ' + hex(snapshot[11]),
+      'R12 ' + hex(snapshot[12]), 'SP  ' + hex(snapshot[13]),
+      'LR  ' + hex(snapshot[14]), 'PC  ' + hex(snapshot[15]),
+      'Next opcode  0x' + (snapshot[16] >>> 0).toString(16).toUpperCase().padStart(4, '0'),
+      'PC-2 opcode  0x' + (snapshot[17] >>> 0).toString(16).toUpperCase().padStart(4, '0'),
+      'Flags  0x' + (snapshot[18] >>> 0).toString(16).toUpperCase()
+    ].join('  ·  ');
+  }
   function failAll(message) {
     for (const [, entry] of pending) entry.reject(new Error(message));
     pending.clear();
@@ -190,7 +212,7 @@
     try {
       const r = await request('run', { count: Number($('emulatorRunCount')?.value || 1000) });
       await refreshFirmwareFrame();
-      const snap = Array.isArray(r.snapshot) ? r.snapshot : []; const regText = snap.length >= 19 ? ' · R0-R3: ' + snap.slice(0,4).map((v,i) => 'R'+i+'='+formatHex(v)).join(' ') + ' · SP: ' + formatHex(snap[13]) + ' · LR: ' + formatHex(snap[14]) + ' · next opcode: 0x' + (snap[16] >>> 0).toString(16).toUpperCase().padStart(4,'0') + ' · previous opcode: 0x' + (snap[17] >>> 0).toString(16).toUpperCase().padStart(4,'0') + ' · flags: 0x' + (snap[18] >>> 0).toString(16).toUpperCase() : ''; setStatus('CPU run batch finished', 'Executed ' + r.executed + ' instruction(s) · total ' + r.instructions + ' · PC ' + formatHex(r.pc) + ' · halted: ' + r.halted + ' · sleeping: ' + Boolean(r.sleeping) + (r.halted ? ' · fault: ' + r.fault : '') + '. The shown image is an SRAM snapshot, not verified LCD output.' + regText);
+      showCpuRegisters(r.snapshot); setStatus('CPU run batch finished', 'Executed ' + r.executed + ' instruction(s) · total ' + r.instructions + ' · PC ' + formatHex(r.pc) + ' · halted: ' + r.halted + ' · sleeping: ' + Boolean(r.sleeping) + (r.halted ? ' · fault: ' + r.fault : '') + '. The shown image is an SRAM snapshot, not verified LCD output.');
       if (r.halted) { $('emulatorStepBtn').disabled = true; $('emulatorRunBtn').disabled = true; }
     } catch (error) {
       setStatus('CPU stopped', error.message || String(error));
