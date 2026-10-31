@@ -38,6 +38,8 @@ pub struct MemoryStorage {
     gpio_port_cycles: u64, gpio_te_high: bool,
     pub spi_registers: [u32; 8], pub spi_last_tx: u16, pub spi_tx_words: u64,
     pub dma_registers: [u32; 78], pub panel_frame: Option<Vec<u16>>, pub dma_irq_pending: bool,
+    pub dma_write_count: u64, pub dma_last_write_address: u32, pub dma_last_write_value: u32,
+    pub dma_transfer_attempts: u64, pub dma_last_source: u32, pub dma_last_destination: u32, pub dma_last_units: u32,
     pub nvic_iser: [u32; 2],
     pub systick_ctrl: u32, pub systick_reload: u32, pub systick_current: u32, pub systick_pending: bool,
 }
@@ -53,7 +55,9 @@ impl MemoryStorage {
             gpio_port_data:[0;3], gpio_port_direction:[0;3], gpio_port_mode:[0;3],
             gpio_port_irq_enable:[0;3], gpio_port_irq_status:[0;3], gpio_port_cycles:0, gpio_te_high:true,
             spi_registers:[0,2,5,0,0,0,0,0], spi_last_tx:0, spi_tx_words:0,
-            dma_registers:[0;78], panel_frame:None, dma_irq_pending:false, nvic_iser:[0;2],
+            dma_registers:[0;78], panel_frame:None, dma_irq_pending:false,
+            dma_write_count:0, dma_last_write_address:0, dma_last_write_value:0,
+            dma_transfer_attempts:0, dma_last_source:0, dma_last_destination:0, dma_last_units:0, nvic_iser:[0;2],
             systick_ctrl:0, systick_reload:0, systick_current:0, systick_pending:false }
     }
     pub fn load_pram(&mut self, bytes: &[u8]) {
@@ -210,6 +214,8 @@ impl MemoryStorage {
         }
         if (0x4000_F000..0x4000_F138).contains(&address) {
             let offset=address-0x4000_F000;
+            self.dma_write_count=self.dma_write_count.wrapping_add(1);
+            self.dma_last_write_address=address; self.dma_last_write_value=value as u32;
             let reg=self.dma_registers[(offset/4) as usize];
             return ((reg >> ((offset&3)*8)) & 0xff) as u8;
         }
@@ -330,7 +336,10 @@ impl MemoryStorage {
                 if self.dma_registers[ctrl_word]&1!=0 {
                     let source=self.dma_registers[ctrl_word+2];
                     let destination=self.dma_registers[ctrl_word+3];
-                    let units=(self.dma_registers[ctrl_word+5]&0x003F_FFFF).min(16_384) as usize;
+                    let raw_units=self.dma_registers[ctrl_word+5]&0x003F_FFFF;
+                    self.dma_transfer_attempts=self.dma_transfer_attempts.wrapping_add(1);
+                    self.dma_last_source=source; self.dma_last_destination=destination; self.dma_last_units=raw_units;
+                    let units=raw_units.min(16_384) as usize;
                     if destination==0x4000_E01C && units>0 {
                         let mut pixels=Vec::with_capacity(units);
                         for i in 0..units {
@@ -361,6 +370,9 @@ impl MemoryStorage {
             _ => return false,
         };
         if let Some(slot)=slice.get_mut(offset) { *slot=value; true } else { false }
+    }
+    pub fn dma_diagnostics(&self) -> (u64,u32,u32,u64,u32,u32,u32) {
+        (self.dma_write_count,self.dma_last_write_address,self.dma_last_write_value,self.dma_transfer_attempts,self.dma_last_source,self.dma_last_destination,self.dma_last_units)
     }
 }
 impl Default for MemoryStorage { fn default() -> Self { Self::new() } }

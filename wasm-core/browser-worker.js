@@ -104,7 +104,7 @@ self.onmessage = async (event) => {
     }
     if (type === "frame") {
       if (!cpu) throw new Error("CPU has not been created.");
-      self.postMessage({ id, ok: true, result: { width: cpu.display_width(), height: cpu.display_height(), enabled: cpu.display_enabled(), rgba: cpu.display_rgba_framebuffer(), framesReceived: cpu.display_frames_received(), nonzeroPixels: cpu.display_nonzero_pixels(), pixelChecksum: cpu.display_pixel_checksum() }});
+      self.postMessage({ id, ok: true, result: { width: cpu.display_width(), height: cpu.display_height(), enabled: cpu.display_enabled(), rgba: cpu.display_rgba_framebuffer(), framesReceived: cpu.display_frames_received(), nonzeroPixels: cpu.display_nonzero_pixels(), pixelChecksum: cpu.display_pixel_checksum(), dmaDiagnostics: cpu.dma_diagnostics() }});
       return;
     }
     throw new Error("Unknown worker message type: " + String(type));

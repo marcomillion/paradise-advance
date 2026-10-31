@@ -81,7 +81,7 @@
     const scale = Number($('previewScale')?.value || 3);
     canvas.style.width = (frame.width * scale) + 'px';
     canvas.style.height = (frame.height * scale) + 'px';
-    if (inputStatus) inputStatus.textContent = 'LCD diagnostics · DMA frames: ' + Number(frame.framesReceived || 0).toLocaleString() + ' · non-black pixels: ' + Number(frame.nonzeroPixels || 0).toLocaleString() + ' / ' + (frame.width * frame.height).toLocaleString() + ' · pixel checksum: 0x' + (Number(frame.pixelChecksum || 0) >>> 0).toString(16).toUpperCase().padStart(8, '0') + '. A frame count of 0 means no modeled LCD DMA frame has reached the panel.';
+    if (inputStatus) inputStatus.textContent = 'LCD diagnostics · DMA frames: ' + Number(frame.framesReceived || 0).toLocaleString() + ' · non-black pixels: ' + Number(frame.nonzeroPixels || 0).toLocaleString() + ' / ' + (frame.width * frame.height).toLocaleString() + ' · pixel checksum: 0x' + (Number(frame.pixelChecksum || 0) >>> 0).toString(16).toUpperCase().padStart(8, '0') + ' · DMA writes: ' + Number(frame.dmaDiagnostics?.[0] || 0).toLocaleString() + ' · last DMA MMIO: ' + formatHex(frame.dmaDiagnostics?.[1] || 0) + ' = ' + formatHex(frame.dmaDiagnostics?.[2] || 0) + ' · transfer attempts: ' + Number(frame.dmaDiagnostics?.[3] || 0).toLocaleString() + ' · last transfer: src ' + formatHex(frame.dmaDiagnostics?.[4] || 0) + ' → dst ' + formatHex(frame.dmaDiagnostics?.[5] || 0) + ' · units ' + Number(frame.dmaDiagnostics?.[6] || 0).toLocaleString() + ';
   }
   window.paradiseBrowserPetDraw = () => { refreshFirmwareFrame().catch(() => {}); };
   function formatHex(value) {
