@@ -124,6 +124,18 @@ impl BrowserCpu {
         if index>=16 {return Err(JsValue::from_str("Register index must be 0..15"));}
         Ok(self.cpu.r[index as usize])
     }
+    /// Snapshot core registers and the next Thumb instruction for browser-side diagnosis.
+    pub fn execution_snapshot(&self)->Vec<u32> {
+        let pc=self.cpu.r[15];
+        let opcode=self.memory.read_u8(pc) as u32 | ((self.memory.read_u8(pc.wrapping_add(1)) as u32)<<8);
+        let previous_pc=pc.wrapping_sub(2);
+        let previous_opcode=self.memory.read_u8(previous_pc) as u32 | ((self.memory.read_u8(previous_pc.wrapping_add(1)) as u32)<<8);
+        let mut out=self.cpu.r.to_vec();
+        out.push(opcode);
+        out.push(previous_opcode);
+        out.push(self.cpu.n as u32 | ((self.cpu.z as u32)<<1) | ((self.cpu.c as u32)<<2) | ((self.cpu.v as u32)<<3));
+        out
+    }
     pub fn step(&mut self)->Result<(),JsValue> {
         let result=self.cpu.step(&mut self.memory).map_err(|e|JsValue::from_str(&format!("{:?}",e)));
         if let Some(frame)=self.memory.panel_frame.take() { self.display.receive_frame(&frame); }
