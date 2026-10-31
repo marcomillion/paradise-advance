@@ -509,7 +509,7 @@ mod tests {
         let trace=m.peripheral_trace();
         assert_eq!(trace.len(),15);
         assert_eq!(&trace[0..3],&[1,0x4000_E000,0x78]);
-        assert_eq!(&trace[9..12],&[0,0x4000_E000,0x12345678]);
+        assert_eq!(&trace[12..15],&[0,0x4000_E000,0x12345678]);
     }
     #[test]
     fn spi0_control_status_and_data_registers_are_mapped() {
