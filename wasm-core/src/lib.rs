@@ -125,6 +125,21 @@ impl BrowserCpu {
         Ok(self.cpu.r[index as usize])
     }
     /// Snapshot core registers and the next Thumb instruction for browser-side diagnosis.
+    /// Return nearby Thumb halfwords as address/opcode pairs around the current PC.
+    /// This is a raw code window, not a disassembler: 32-bit Thumb instructions occupy two entries.
+    pub fn execution_window(&self)->Vec<u32> {
+        let pc=self.cpu.r[15]&!1;
+        let start=pc.saturating_sub(16)&!1;
+        let mut out=Vec::with_capacity(34);
+        for index in 0..17u32 {
+            let address=start.wrapping_add(index*2);
+            let opcode=self.memory.read_u8(address) as u32
+                | ((self.memory.read_u8(address.wrapping_add(1)) as u32)<<8);
+            out.push(address);
+            out.push(opcode);
+        }
+        out
+    }
     pub fn execution_snapshot(&self)->Vec<u32> {
         let pc=self.cpu.r[15];
         let opcode=self.memory.read_u8(pc) as u32 | ((self.memory.read_u8(pc.wrapping_add(1)) as u32)<<8);
