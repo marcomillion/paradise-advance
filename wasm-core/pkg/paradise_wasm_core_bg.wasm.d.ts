@@ -27,6 +27,7 @@ export const browsercpu_register: (a: number, b: number) => [number, number, num
 export const browsercpu_reset_from_vectors: (a: number, b: number) => void;
 export const browsercpu_rotate_dial: (a: number, b: number) => void;
 export const browsercpu_run_steps: (a: number, b: number) => number;
+export const browsercpu_run_until_pc: (a: number, b: number, c: number) => [number, number];
 export const browsercpu_set_button: (a: number, b: number, c: number) => [number, number];
 export const browsercpu_set_register: (a: number, b: number, c: number) => [number, number];
 export const browsercpu_sleeping: (a: number) => number;

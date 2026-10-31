@@ -207,6 +207,19 @@ export class BrowserCpu {
         return ret >>> 0;
     }
     /**
+     * Execute until the PC reaches an address, stopping before that instruction.
+     * Returns [executed_instructions, breakpoint_reached, final_pc].
+     * @param {number} address
+     * @param {number} max_steps
+     * @returns {Uint32Array}
+     */
+    run_until_pc(address, max_steps) {
+        const ret = wasm.browsercpu_run_until_pc(this.__wbg_ptr, address, max_steps);
+        var v1 = getArrayU32FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v1;
+    }
+    /**
      * @param {number} index
      * @param {boolean} pressed
      */

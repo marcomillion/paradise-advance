@@ -39,6 +39,11 @@ export class BrowserCpu {
     reset_from_vectors(vector_base: number): void;
     rotate_dial(delta: number): void;
     run_steps(count: number): number;
+    /**
+     * Execute until the PC reaches an address, stopping before that instruction.
+     * Returns [executed_instructions, breakpoint_reached, final_pc].
+     */
+    run_until_pc(address: number, max_steps: number): Uint32Array;
     set_button(index: number, pressed: boolean): void;
     set_register(index: number, value: number): void;
     sleeping(): boolean;
@@ -130,6 +135,7 @@ export interface InitOutput {
     readonly browsercpu_reset_from_vectors: (a: number, b: number) => void;
     readonly browsercpu_rotate_dial: (a: number, b: number) => void;
     readonly browsercpu_run_steps: (a: number, b: number) => number;
+    readonly browsercpu_run_until_pc: (a: number, b: number, c: number) => [number, number];
     readonly browsercpu_set_button: (a: number, b: number, c: number) => [number, number];
     readonly browsercpu_set_register: (a: number, b: number, c: number) => [number, number];
     readonly browsercpu_sleeping: (a: number) => number;
