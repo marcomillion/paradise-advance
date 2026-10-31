@@ -165,7 +165,7 @@
       $('emulatorRunBtn').disabled = false;
       setStatus('CPU loaded · not yet a complete emulator',
         'The firmware user-code region was decrypted and copied into PRAM. Initial SP ' + formatHex(result.initialSp) +
-        ', reset PC ' + formatHex(result.initialPc) + '. The Thumb interpreter and hardware models are partial: GPIO, SysTick, SPI, DMA, and LCD signaling have initial models, but the retail chip's full MMIO map and LCD protocol are not yet verified. Step/run may stop on an unsupported instruction.');
+        ', reset PC ' + formatHex(result.initialPc) + '. The Thumb interpreter and hardware models are partial: GPIO, SysTick, SPI, DMA, and LCD signaling have initial models, but the retail chip’s full MMIO map and LCD protocol are not yet verified. Step/run may stop on an unsupported instruction.');
     } catch (error) {
       cpuLoaded = false;
       setStatus('Firmware did not start', error.message || String(error));
