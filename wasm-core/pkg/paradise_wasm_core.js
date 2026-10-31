@@ -76,6 +76,16 @@ export class BrowserCpu {
         return v1;
     }
     /**
+     * Snapshot core registers and the next Thumb instruction for browser-side diagnosis.
+     * @returns {Uint32Array}
+     */
+    execution_snapshot() {
+        const ret = wasm.browsercpu_execution_snapshot(this.__wbg_ptr);
+        var v1 = getArrayU32FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v1;
+    }
+    /**
      * @returns {boolean}
      */
     halted() {
