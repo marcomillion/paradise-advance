@@ -233,3 +233,23 @@
 .key-search-progress>div{height:100%;width:0;background:linear-gradient(90deg,var(--purple),var(--mint));transition:width .2s ease}
 .key-search-footnote{display:block;margin:8px 14px 0;color:var(--muted);font-size:10px;line-height:1.5}
 @media(max-width:420px){.key-search-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+
+/* Firmware diagnostics: keep the complete Thumb code window visible and scrollable. */
+#cpuCodeWindowStatus{
+  display:block;
+  width:100%;
+  min-height:220px;
+  max-height:min(52vh,520px);
+  margin:8px 0 0;
+  padding:10px;
+  overflow:auto;
+  white-space:pre;
+  overflow-wrap:normal;
+  font:11px/1.65 'DM Mono',monospace;
+  color:var(--mint);
+  background:#141423;
+  border:1px solid var(--line);
+  border-radius:8px;
+  scrollbar-gutter:stable;
+}
