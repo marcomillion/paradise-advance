@@ -236,6 +236,21 @@
 
 
 /* Firmware diagnostics: keep the complete Thumb code window visible and scrollable. */
+#peripheralTraceStatus{
+  display:block;
+  width:100%;
+  max-height:220px;
+  margin:8px 0 0;
+  padding:10px;
+  overflow:auto;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+  font:10px/1.6 'DM Mono',monospace;
+  color:var(--mint);
+  background:#141423;
+  border:1px solid var(--line);
+  border-radius:8px;
+}
 #cpuCodeWindowStatus{
   display:block;
   width:100%;
