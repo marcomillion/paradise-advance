@@ -137,6 +137,15 @@ export class BrowserCpu {
         return this;
     }
     /**
+     * @returns {Uint32Array}
+     */
+    peripheral_diagnostics() {
+        const ret = wasm.browsercpu_peripheral_diagnostics(this.__wbg_ptr);
+        var v1 = getArrayU32FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v1;
+    }
+    /**
      * @param {number} index
      * @returns {number}
      */
