@@ -274,3 +274,26 @@ test('adding a palette colour is preserved after reload', async ({ page }) => {
   await page.reload();
   await expect(page.locator('#palette button[title="#123456"]')).toBeVisible();
 });
+
+
+test('unsupported animation project versions are rejected safely', async ({ page }) => {
+  await page.locator('#spriteInput').setInputFiles({
+    name: 'future-animation.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
+      format: 'paradise-mod-studio-animation',
+      version: 99,
+      fps: 4,
+      frames: [{
+        name: 'Unsupported',
+        width: 1,
+        height: 1,
+        pixels: ['#ff0000'],
+        palette: ['#ff0000']
+      }]
+    }))
+  });
+
+  await expect(page.locator('#toast')).toContainText('version is not supported');
+  await expect(page.locator('#animationFrameCount')).toHaveText('0 frames');
+});
