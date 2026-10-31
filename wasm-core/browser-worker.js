@@ -81,7 +81,7 @@ self.onmessage = async (event) => {
     if (type === "step") {
       if (!cpu) throw new Error("CPU has not been created.");
       cpu.step();
-      self.postMessage({ id, ok: true, result: { instructions: cpu.instructions(), pc: cpu.register(15), halted: cpu.halted(), sleeping: cpu.sleeping(), fault: cpu.last_fault() }});
+      self.postMessage({ id, ok: true, result: { instructions: cpu.instructions(), pc: cpu.register(15), halted: cpu.halted(), sleeping: cpu.sleeping(), fault: cpu.last_fault(), snapshot: Array.from(cpu.execution_snapshot()), codeWindow: Array.from(cpu.execution_window()) }});
       return;
     }
     if (type === "run") {
