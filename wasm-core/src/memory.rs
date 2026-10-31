@@ -214,8 +214,6 @@ impl MemoryStorage {
         }
         if (0x4000_F000..0x4000_F138).contains(&address) {
             let offset=address-0x4000_F000;
-            self.dma_write_count=self.dma_write_count.wrapping_add(1);
-            self.dma_last_write_address=address; self.dma_last_write_value=value as u32;
             let reg=self.dma_registers[(offset/4) as usize];
             return ((reg >> ((offset&3)*8)) & 0xff) as u8;
         }
