@@ -12,6 +12,7 @@ export const browsercpu_display_nonzero_pixels: (a: number) => number;
 export const browsercpu_display_pixel_checksum: (a: number) => number;
 export const browsercpu_display_rgba_framebuffer: (a: number) => [number, number];
 export const browsercpu_display_width: (a: number) => number;
+export const browsercpu_dma_diagnostics: (a: number) => [number, number];
 export const browsercpu_halted: (a: number) => number;
 export const browsercpu_instructions: (a: number) => bigint;
 export const browsercpu_last_fault: (a: number) => [number, number];

@@ -15,6 +15,7 @@ export class BrowserCpu {
     display_pixel_checksum(): number;
     display_rgba_framebuffer(): Uint8Array;
     display_width(): number;
+    dma_diagnostics(): Uint32Array;
     halted(): boolean;
     instructions(): bigint;
     last_fault(): string;
@@ -105,6 +106,7 @@ export interface InitOutput {
     readonly browsercpu_display_pixel_checksum: (a: number) => number;
     readonly browsercpu_display_rgba_framebuffer: (a: number) => [number, number];
     readonly browsercpu_display_width: (a: number) => number;
+    readonly browsercpu_dma_diagnostics: (a: number) => [number, number];
     readonly browsercpu_halted: (a: number) => number;
     readonly browsercpu_instructions: (a: number) => bigint;
     readonly browsercpu_last_fault: (a: number) => [number, number];
