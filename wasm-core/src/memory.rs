@@ -512,6 +512,17 @@ mod tests {
         assert_eq!(&trace[12..15],&[0,0x4000_E000,0x12345678]);
     }
     #[test]
+    fn peripheral_trace_retains_only_the_latest_32_accesses() {
+        let mut m=MemoryStorage::new();
+        for i in 0..33u32 {
+            let _=m.write_u8(0x4500_0000+i,i as u8);
+        }
+        let trace=m.peripheral_trace();
+        assert_eq!(trace.len(),96);
+        assert_eq!(&trace[0..3],&[1,0x4500_0001,1]);
+        assert_eq!(&trace[93..96],&[1,0x4500_0020,32]);
+    }
+    #[test]
     fn spi0_control_status_and_data_registers_are_mapped() {
         let mut m=MemoryStorage::new();
         assert_eq!(m.read_u32(0x4000_E008),0x05); // TXEMPTY | RXEMPTY
