@@ -256,3 +256,21 @@ test('imported animation projects survive a browser reload', async ({ page }) =>
   await expect(page.locator('#animationFps')).toHaveValue('6');
   await expect(page.locator('#animationPreviewLabel')).toHaveText('Frame 1 of 1');
 });
+
+
+test('adding a palette colour is preserved after reload', async ({ page }) => {
+  await page.locator('#newSpriteBtn').click();
+  await page.locator('#colorPicker').evaluate(el => {
+    el.value = '#123456';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.locator('#addColorBtn').click();
+
+  await page.waitForFunction(() => {
+    const saved = JSON.parse(localStorage.getItem('paradiseModStudio.workspace.v1') || '{}');
+    return saved.sprites?.[0]?.palette?.includes('#123456');
+  });
+
+  await page.reload();
+  await expect(page.locator('#palette button[title="#123456"]')).toBeVisible();
+});
