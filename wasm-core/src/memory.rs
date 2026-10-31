@@ -290,6 +290,7 @@ impl MemoryStorage {
             self.peripheral_write_count=self.peripheral_write_count.wrapping_add(4);
             self.peripheral_last_write_address=address.wrapping_add(3);
             self.peripheral_last_write_value=(value>>24)&0xFF;
+            for i in 0..4 { self.trace_peripheral(1,address.wrapping_add(i),(value>>(i*8))&0xFF); }
             self.spi_write_reg(address-0x4000_E000,value); return true;
         }
         if let Some((target,bit))=Self::bitband_target(address) {
@@ -505,6 +506,10 @@ mod tests {
         assert_eq!(m.peripheral_read_count,1);
         assert_eq!(m.peripheral_last_read_address,0x4000_E000);
         assert_eq!(m.peripheral_last_read_value,0x12345678);
+        let trace=m.peripheral_trace();
+        assert_eq!(trace.len(),15);
+        assert_eq!(&trace[0..3],&[1,0x4000_E000,0x78]);
+        assert_eq!(&trace[9..12],&[0,0x4000_E000,0x12345678]);
     }
     #[test]
     fn spi0_control_status_and_data_registers_are_mapped() {
