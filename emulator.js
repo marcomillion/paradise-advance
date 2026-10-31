@@ -190,7 +190,7 @@
     try {
       const r = await request('run', { count: Number($('emulatorRunCount')?.value || 1000) });
       await refreshFirmwareFrame();
-      setStatus('CPU run batch finished', 'Executed ' + r.executed + ' instruction(s) · total ' + r.instructions + ' · PC ' + formatHex(r.pc) + ' · halted: ' + r.halted + ' · sleeping: ' + Boolean(r.sleeping) + (r.halted ? ' · fault: ' + r.fault : '') + '. The shown image is an SRAM snapshot, not verified LCD output.');
+      const snap = Array.isArray(r.snapshot) ? r.snapshot : []; const regText = snap.length >= 19 ? ' · R0-R3: ' + snap.slice(0,4).map((v,i) => 'R'+i+'='+formatHex(v)).join(' ') + ' · SP: ' + formatHex(snap[13]) + ' · LR: ' + formatHex(snap[14]) + ' · next opcode: 0x' + (snap[16] >>> 0).toString(16).toUpperCase().padStart(4,'0') + ' · previous opcode: 0x' + (snap[17] >>> 0).toString(16).toUpperCase().padStart(4,'0') + ' · flags: 0x' + (snap[18] >>> 0).toString(16).toUpperCase() : ''; setStatus('CPU run batch finished', 'Executed ' + r.executed + ' instruction(s) · total ' + r.instructions + ' · PC ' + formatHex(r.pc) + ' · halted: ' + r.halted + ' · sleeping: ' + Boolean(r.sleeping) + (r.halted ? ' · fault: ' + r.fault : '') + '. The shown image is an SRAM snapshot, not verified LCD output.' + regText);
       if (r.halted) { $('emulatorStepBtn').disabled = true; $('emulatorRunBtn').disabled = true; }
     } catch (error) {
       setStatus('CPU stopped', error.message || String(error));
