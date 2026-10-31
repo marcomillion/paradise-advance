@@ -41,6 +41,22 @@
       'Flags  0x' + (snapshot[18] >>> 0).toString(16).toUpperCase()
     ].join('  ·  ');
   }
+  function showCodeWindow(words, currentPc) {
+    const panel = $('cpuCodeWindowStatus');
+    if (!panel) return;
+    if (!words || typeof words.length !== 'number' || words.length < 4 || words.length % 2 !== 0) {
+      panel.textContent = 'Code window unavailable — run another CPU batch.';
+      return;
+    }
+    const rows = [];
+    for (let i = 0; i < words.length; i += 2) {
+      const address = Number(words[i]) >>> 0;
+      const opcode = Number(words[i + 1]) & 0xFFFF;
+      const marker = address === (Number(currentPc) >>> 0) ? '→ ' : '  ';
+      rows.push(marker + formatHex(address) + '  0x' + opcode.toString(16).toUpperCase().padStart(4, '0'));
+    }
+    panel.textContent = rows.join('\\n') + '\\n\\nRaw Thumb halfwords; 32-bit instructions use two rows.';
+  }
   function failAll(message) {
     for (const [, entry] of pending) entry.reject(new Error(message));
     pending.clear();
@@ -214,7 +230,7 @@
     try {
       const r = await request('run', { count: Number($('emulatorRunCount')?.value || 1000) });
       await refreshFirmwareFrame();
-      showCpuRegisters(r.snapshot); setStatus('CPU run batch finished', 'Executed ' + r.executed + ' instruction(s) · total ' + r.instructions + ' · PC ' + formatHex(r.pc) + ' · halted: ' + r.halted + ' · sleeping: ' + Boolean(r.sleeping) + (r.halted ? ' · fault: ' + r.fault : '') + '. The shown image is an SRAM snapshot, not verified LCD output.');
+      showCpuRegisters(r.snapshot); showCodeWindow(r.codeWindow, r.pc); setStatus('CPU run batch finished', 'Executed ' + r.executed + ' instruction(s) · total ' + r.instructions + ' · PC ' + formatHex(r.pc) + ' · halted: ' + r.halted + ' · sleeping: ' + Boolean(r.sleeping) + (r.halted ? ' · fault: ' + r.fault : '') + '. The shown image is an SRAM snapshot, not verified LCD output.');
       if (r.halted) { $('emulatorStepBtn').disabled = true; $('emulatorRunBtn').disabled = true; }
     } catch (error) {
       setStatus('CPU stopped', error.message || String(error));
