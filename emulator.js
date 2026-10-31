@@ -66,7 +66,7 @@
     if (initPromise) return initPromise;
     initPromise = new Promise((resolve, reject) => {
       try {
-        worker = new Worker('wasm-core/browser-worker.js?v=peripheral-read-trace-20261031', { type: 'module' });
+        worker = new Worker('wasm-core/browser-worker.js?v=single-step-snapshot-20261101', { type: 'module' });
       } catch (error) {
         worker = null; initPromise = null; reject(error); return;
       }
