@@ -213,7 +213,7 @@ test('unchecking device-key persistence clears the saved key', async ({ page }) 
 test('animation timeline is restored after reloading the workspace', async ({ page }) => {
   await page.locator('#newSpriteBtn').click();
   await page.locator('#animationAddFrame').click();
-  await page.locator('#animationFps').fill('7');
+  await page.locator('#animationFps').evaluate(el => { el.value = '7'; el.dispatchEvent(new Event('input', { bubbles: true })); });
   await page.waitForFunction(() => {
     const saved = JSON.parse(localStorage.getItem('paradiseModStudio.workspace.v1') || '{}');
     return saved.animation?.frames?.length === 1 && saved.animation.fps === 7;
