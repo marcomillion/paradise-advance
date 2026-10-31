@@ -223,7 +223,7 @@
 .preview-settings>.notice b{color:var(--mint)}
 
 /* Emulator controls: keep the batch selector consistent with the studio inputs. */
-.run-count-control{display:flex;align-items:center;gap:7px;padding:0 4px;color:var(--muted);font-size:10px;white-space:nowrap}.run-count-control select{min-width:100px;background:#121221;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:9px;font:11px 'DM Mono',monospace}.run-count-control select:focus-visible{outline:2px solid var(--purple);outline-offset:2px}
+.run-count-control{display:flex;align-items:center;gap:7px;padding:0 4px;color:var(--muted);font-size:10px;white-space:nowrap}.run-count-control select{min-width:100px;background:#121221;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:9px;font:11px 'DM Mono',monospace}.run-count-control select:focus-visible{outline:2px solid var(--purple);outline-offset:2px}.run-count-control input{width:112px;min-width:0;background:#121221;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:9px;font:11px 'DM Mono',monospace}.run-count-control input:focus-visible{outline:2px solid var(--purple);outline-offset:2px}
 
 .key-search-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 14px 0}
 .key-search-stats>div{min-width:0;padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:#141423;display:flex;flex-direction:column;gap:5px}
