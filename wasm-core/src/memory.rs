@@ -41,6 +41,7 @@ pub struct MemoryStorage {
     pub dma_write_count: u64, pub dma_last_write_address: u32, pub dma_last_write_value: u32,
     pub dma_transfer_attempts: u64, pub dma_last_source: u32, pub dma_last_destination: u32, pub dma_last_units: u32,
     pub peripheral_write_count: u64, pub peripheral_last_write_address: u32, pub peripheral_last_write_value: u32,
+    pub peripheral_read_count: u64, pub peripheral_last_read_address: u32, pub peripheral_last_read_value: u32,
     pub nvic_iser: [u32; 2],
     pub systick_ctrl: u32, pub systick_reload: u32, pub systick_current: u32, pub systick_pending: bool,
 }
@@ -59,7 +60,8 @@ impl MemoryStorage {
             dma_registers:[0;78], panel_frame:None, dma_irq_pending:false,
             dma_write_count:0, dma_last_write_address:0, dma_last_write_value:0,
             dma_transfer_attempts:0, dma_last_source:0, dma_last_destination:0, dma_last_units:0,
-            peripheral_write_count:0, peripheral_last_write_address:0, peripheral_last_write_value:0, nvic_iser:[0;2],
+            peripheral_write_count:0, peripheral_last_write_address:0, peripheral_last_write_value:0,
+            peripheral_read_count:0, peripheral_last_read_address:0, peripheral_last_read_value:0, nvic_iser:[0;2],
             systick_ctrl:0, systick_reload:0, systick_current:0, systick_pending:false }
     }
     pub fn load_pram(&mut self, bytes: &[u8]) {
@@ -238,6 +240,11 @@ impl MemoryStorage {
     /// Debugger/UI peeks should keep using read_u8 so inspection does not mutate device state.
     pub fn read_cpu_u8(&mut self, address: u32) -> u8 {
         let value = self.read_u8(address);
+        if (0x4000_0000..0x5000_0000).contains(&address) {
+            self.peripheral_read_count=self.peripheral_read_count.wrapping_add(1);
+            self.peripheral_last_read_address=address;
+            self.peripheral_last_read_value=value as u32;
+        }
         if (0xE000_E010..0xE000_E014).contains(&address) {
             self.systick_ctrl &= !(1 << 16);
         }
@@ -246,6 +253,11 @@ impl MemoryStorage {
     /// CPU-originated word read. Capture the register value before clearing COUNTFLAG.
     pub fn read_cpu_u32(&mut self, address: u32) -> u32 {
         let value = self.read_u32(address);
+        if (0x4000_0000..0x5000_0000).contains(&address) {
+            self.peripheral_read_count=self.peripheral_read_count.wrapping_add(1);
+            self.peripheral_last_read_address=address;
+            self.peripheral_last_read_value=value;
+        }
         if address == 0xE000_E010 {
             self.systick_ctrl &= !(1 << 16);
         }
@@ -384,8 +396,8 @@ impl MemoryStorage {
     pub fn dma_diagnostics(&self) -> (u64,u32,u32,u64,u32,u32,u32) {
         (self.dma_write_count,self.dma_last_write_address,self.dma_last_write_value,self.dma_transfer_attempts,self.dma_last_source,self.dma_last_destination,self.dma_last_units)
     }
-    pub fn peripheral_diagnostics(&self) -> (u64,u32,u32,u64,u64) {
-        (self.peripheral_write_count,self.peripheral_last_write_address,self.peripheral_last_write_value,self.spi_tx_words,self.dma_write_count)
+    pub fn peripheral_diagnostics(&self) -> (u64,u32,u32,u64,u64,u64,u32,u32) {
+        (self.peripheral_write_count,self.peripheral_last_write_address,self.peripheral_last_write_value,self.spi_tx_words,self.dma_write_count,self.peripheral_read_count,self.peripheral_last_read_address,self.peripheral_last_read_value)
     }
 }
 impl Default for MemoryStorage { fn default() -> Self { Self::new() } }
