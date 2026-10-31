@@ -170,6 +170,23 @@ impl BrowserCpu {
         else { self.display.sync_from_sram(&self.memory.sram); }
         done
     }
+    /// Execute until the PC reaches an address, stopping before that instruction.
+    /// Returns [executed_instructions, breakpoint_reached, final_pc].
+    pub fn run_until_pc(&mut self,address:u32,max_steps:u32)->Vec<u32> {
+        let target=address&!1;
+        let mut done=0u32;
+        let mut reached=(self.cpu.r[15]&!1)==target;
+        for _ in 0..max_steps.min(1_000_000) {
+            if reached || self.cpu.halted { break; }
+            let before=self.cpu.instructions;
+            if self.cpu.step(&mut self.memory).is_err(){break;}
+            if self.cpu.instructions!=before { done=done.saturating_add(1); }
+            reached=(self.cpu.r[15]&!1)==target;
+        }
+        if let Some(frame)=self.memory.panel_frame.take() { self.display.receive_frame(&frame); }
+        else { self.display.sync_from_sram(&self.memory.sram); }
+        vec![done,reached as u32,self.cpu.r[15]]
+    }
     pub fn display_width(&self)->u32 {self.display.width() as u32}
     pub fn display_height(&self)->u32 {self.display.height() as u32}
     pub fn display_rgba_framebuffer(&self)->Vec<u8> {self.display.rgba_bytes()}
@@ -273,6 +290,17 @@ mod browser_integration_tests {
         let frame=cpu.display_rgba_framebuffer();
         assert_eq!(&frame[0..4],&[0,255,0,255]);
         assert_eq!(&frame[4..8],&[0,0,255,255]);
+    }
+
+    #[test]
+    fn run_until_pc_stops_before_breakpoint_instruction() {
+        let mut cpu=BrowserCpu::new();
+        cpu.memory.pram[0..4].copy_from_slice(&[0x2A,0x20,0xFE,0xE7]); // MOVS r0,#42; B .
+        cpu.cpu.r[15]=0;
+        let result=cpu.run_until_pc(2,10);
+        assert_eq!(result,vec![1,1,2]);
+        assert_eq!(cpu.register(0).unwrap(),42);
+        assert_eq!(cpu.instructions(),1);
     }
 
     #[test]
