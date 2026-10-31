@@ -321,6 +321,9 @@ impl MemoryStorage {
             let word=(offset/4) as usize;
             let shift=(offset&3)*8;
             let mask=!(0xffu32<<shift);
+            self.dma_write_count=self.dma_write_count.wrapping_add(1);
+            self.dma_last_write_address=address;
+            self.dma_last_write_value=value as u32;
             self.dma_registers[word]=(self.dma_registers[word]&mask)|((value as u32)<<shift);
             if offset==0x0B {
                 let ack=self.dma_registers[2];
