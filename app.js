@@ -20,13 +20,22 @@ function restoreWorkspace(){
   if(typeof saved.color==='string'&&/^#[0-9a-f]{6}$/i.test(saved.color))state.color=saved.color;
   if(typeof saved.grid==='boolean')state.grid=saved.grid;
   if(Number.isFinite(saved.zoom))state.zoom=Math.max(4,Math.min(20,saved.zoom));
+  const savedFrames=Array.isArray(saved.animation?.frames)?saved.animation.frames.slice(0,300):[];
+  let framePixels=0;
+  animationState.frames=savedFrames.filter(validSavedSprite).filter(frame=>{
+   framePixels+=frame.pixels.length;
+   return framePixels<=1500000;
+  }).map((frame,i)=>({...frame,name:String(frame.name||('Frame '+(i+1))).slice(0,64),pixels:frame.pixels.map(c=>typeof c==='string'&&/^#[0-9a-f]{6}$/i.test(c)?c:null),palette:Array.isArray(frame.palette)?frame.palette.filter(c=>typeof c==='string'&&/^#[0-9a-f]{6}$/i.test(c)).slice(0,64):[...starterPalette]}));
+  animationState.selected=animationState.frames.length?Math.max(0,Math.min(animationState.frames.length-1,Number(saved.animation?.selected)||0)):-1;
+  if(Number.isFinite(saved.animation?.fps))$('animationFps').value=String(Math.max(1,Math.min(12,saved.animation.fps)));
+  $('animationFpsValue').textContent=$('animationFps').value;
  }catch(_){/* Storage can be disabled or contain an old/corrupt workspace. */}
 }
 function scheduleWorkspaceSave(){
  clearTimeout(workspaceSaveTimer);
  workspaceSaveTimer=setTimeout(()=>{
   try{
-   const payload={version:1,sprites:state.sprites,gallery:state.gallery,activeId:state.activeId,color:state.color,grid:state.grid,zoom:state.zoom};
+   const payload={version:1,sprites:state.sprites,gallery:state.gallery,activeId:state.activeId,color:state.color,grid:state.grid,zoom:state.zoom,animation:{fps:Number($('animationFps').value)||4,selected:animationState.selected,frames:animationState.frames.map(f=>({name:f.name,width:f.width,height:f.height,pixels:f.pixels,palette:f.palette}))}};
    localStorage.setItem(WORKSPACE_STORAGE_KEY,JSON.stringify(payload));
   }catch(_){
    if(!workspaceStorageWarningShown){workspaceStorageWarningShown=true;toast('Browser storage is full or unavailable. Export your sprite JSON to keep a backup.');}
@@ -162,6 +171,11 @@ const keyboardButtonMap={ArrowLeft:'C',ArrowRight:'A',Enter:'B',Escape:'C'};
  });
  $('previewBg').oninput=renderPreview;$('previewScale').oninput=renderPreview;$('previewChecker').onchange=renderPreview;$('downloadPreviewBtn').onclick=()=>{const c=$('previewCanvas');c.toBlob(blob=>exportBlob(blob,'paradise-preview.png'))};$('emulatorLoadFirmwareBtn').onclick=()=>$('firmwareInput').click();
 restoreWorkspace();
+renderAnimationStrip();
+if(animationState.frames.length){
+ drawAnimationFrame(animationState.frames[animationState.selected>=0?animationState.selected:0],$('animationPreviewCanvas'));
+ $('animationPreviewLabel').textContent='Frame '+((animationState.selected>=0?animationState.selected:0)+1)+' of '+animationState.frames.length;
+}
 if(state.sprites.length){$('colorPicker').value=state.color;$('gridToggle').checked=state.grid;$('zoomSlider').value=String(state.zoom);$('zoomValue').textContent=state.zoom+'×';}
 renderAll();
 
@@ -494,11 +508,11 @@ function loadAnimationFrame(index) {
  $('spriteName').value=s.name;$('spriteWidth').value=s.width;$('spriteHeight').value=s.height;renderAll();$('animationPreviewLabel').textContent='Frame '+(index+1)+' of '+animationState.frames.length;drawAnimationFrame(frame,$('animationPreviewCanvas'));
 }
 function addAnimationFrame() {
- const s=active();if(!s)return toast('Create or select a sprite first');animationState.frames.push(cloneAnimationFrame(s));animationState.selected=animationState.frames.length-1;stopAnimation();renderAnimationStrip();drawAnimationFrame(animationState.frames[animationState.selected],$('animationPreviewCanvas'));$('animationPreviewLabel').textContent='Frame '+(animationState.selected+1)+' ready';
+ const s=active();if(!s)return toast('Create or select a sprite first');animationState.frames.push(cloneAnimationFrame(s));animationState.selected=animationState.frames.length-1;stopAnimation();renderAnimationStrip();drawAnimationFrame(animationState.frames[animationState.selected],$('animationPreviewCanvas'));$('animationPreviewLabel').textContent='Frame '+(animationState.selected+1)+' ready';scheduleWorkspaceSave();
 }
 function updateAnimationFrame() {
  const s=active();if(!s)return toast('Create or select a sprite first');if(animationState.selected<0||!animationState.frames[animationState.selected])return toast('Select or add an animation frame first');
- animationState.frames[animationState.selected]=cloneAnimationFrame(s);renderAnimationStrip();drawAnimationFrame(animationState.frames[animationState.selected],$('animationPreviewCanvas'));toast('Animation frame updated');
+ animationState.frames[animationState.selected]=cloneAnimationFrame(s);renderAnimationStrip();drawAnimationFrame(animationState.frames[animationState.selected],$('animationPreviewCanvas'));scheduleWorkspaceSave();toast('Animation frame updated');
 }
 function playAnimation() {
  if(animationState.frames.length<2)return toast('Add at least two frames to play an animation');if(animationState.timer){stopAnimation();return}
@@ -516,9 +530,9 @@ function exportAnimationJson() {
  $('workspaceInput').addEventListener('change',e=>{importWorkspaceFile(e.target.files?.[0]);e.target.value='';});
 $('animationAddFrame').addEventListener('click',addAnimationFrame);
 $('animationUpdateFrame').addEventListener('click',updateAnimationFrame);
-$('animationDeleteFrame').addEventListener('click',()=>{if(animationState.selected<0||!animationState.frames.length)return toast('Select a frame to delete first');stopAnimation();animationState.frames.splice(animationState.selected,1);animationState.selected=animationState.frames.length?Math.min(animationState.selected,animationState.frames.length-1):-1;renderAnimationStrip();if(animationState.selected>=0){loadAnimationFrame(animationState.selected)}else{$('animationPreviewLabel').textContent='Preview idle';const ctx=$('animationPreviewCanvas').getContext('2d');ctx.clearRect(0,0,$('animationPreviewCanvas').width,$('animationPreviewCanvas').height)}toast('Animation frame deleted')});
+$('animationDeleteFrame').addEventListener('click',()=>{if(animationState.selected<0||!animationState.frames.length)return toast('Select a frame to delete first');stopAnimation();animationState.frames.splice(animationState.selected,1);animationState.selected=animationState.frames.length?Math.min(animationState.selected,animationState.frames.length-1):-1;renderAnimationStrip();if(animationState.selected>=0){loadAnimationFrame(animationState.selected)}else{$('animationPreviewLabel').textContent='Preview idle';const ctx=$('animationPreviewCanvas').getContext('2d');ctx.clearRect(0,0,$('animationPreviewCanvas').width,$('animationPreviewCanvas').height)}scheduleWorkspaceSave();toast('Animation frame deleted')});
 $('animationPrevFrame').addEventListener('click',()=>{if(!animationState.frames.length)return;stopAnimation();animationState.selected=(animationState.selected-1+animationState.frames.length)%animationState.frames.length;loadAnimationFrame(animationState.selected);renderAnimationStrip()});
 $('animationNextFrame').addEventListener('click',()=>{if(!animationState.frames.length)return;stopAnimation();animationState.selected=(animationState.selected+1)%animationState.frames.length;loadAnimationFrame(animationState.selected);renderAnimationStrip()});
 $('animationPlay').addEventListener('click',playAnimation);
 $('animationExport').addEventListener('click',exportAnimationJson);
-$('animationFps').addEventListener('input',e=>{$('animationFpsValue').textContent=e.target.value;if(animationState.timer){stopAnimation();playAnimation()}});
+$('animationFps').addEventListener('input',e=>{$('animationFpsValue').textContent=e.target.value;scheduleWorkspaceSave();if(animationState.timer){stopAnimation();playAnimation()}});
