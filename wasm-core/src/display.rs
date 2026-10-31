@@ -68,6 +68,10 @@ impl DisplayController {
     pub fn dirty(&self) -> bool { self.dirty }
     pub fn clear_dirty(&mut self) { self.dirty = false; }
     pub fn frames_received(&self) -> u64 { self.frames_received }
+    /// Number of non-black pixels in the current panel buffer.
+    pub fn nonzero_pixels(&self) -> u32 { self.vram.iter().filter(|&&p| p != 0).count() as u32 }
+    /// Cheap deterministic checksum for comparing panel output between runs.
+    pub fn pixel_checksum(&self) -> u32 { self.vram.iter().fold(0u32, |sum, &p| sum.wrapping_add(p as u32)) }
 }
 impl Default for DisplayController { fn default() -> Self { Self::new() } }
 

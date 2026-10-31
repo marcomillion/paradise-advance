@@ -81,7 +81,7 @@
     const scale = Number($('previewScale')?.value || 3);
     canvas.style.width = (frame.width * scale) + 'px';
     canvas.style.height = (frame.height * scale) + 'px';
-    if (inputStatus) inputStatus.textContent = 'Experimental SRAM framebuffer snapshot · partial DMA path; buttons and dial use an initial GPIO model.';
+    if (inputStatus) inputStatus.textContent = 'LCD diagnostics · DMA frames: ' + Number(frame.framesReceived || 0).toLocaleString() + ' · non-black pixels: ' + Number(frame.nonzeroPixels || 0).toLocaleString() + ' / ' + (frame.width * frame.height).toLocaleString() + ' · pixel checksum: 0x' + (Number(frame.pixelChecksum || 0) >>> 0).toString(16).toUpperCase().padStart(8, '0') + '. A frame count of 0 means no modeled LCD DMA frame has reached the panel.';
   }
   window.paradiseBrowserPetDraw = () => { refreshFirmwareFrame().catch(() => {}); };
   function formatHex(value) {

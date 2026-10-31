@@ -145,6 +145,9 @@ impl BrowserCpu {
     pub fn display_height(&self)->u32 {self.display.height() as u32}
     pub fn display_rgba_framebuffer(&self)->Vec<u8> {self.display.rgba_bytes()}
     pub fn display_enabled(&self)->bool {self.display.enabled()}
+    pub fn display_frames_received(&self)->u32 {self.display.frames_received() as u32}
+    pub fn display_nonzero_pixels(&self)->u32 {self.display.nonzero_pixels()}
+    pub fn display_pixel_checksum(&self)->u32 {self.display.pixel_checksum()}
     pub fn instructions(&self)->u64 {self.cpu.instructions}
     pub fn halted(&self)->bool {self.cpu.halted}
     pub fn sleeping(&self)->bool {self.cpu.is_sleeping()}
