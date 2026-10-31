@@ -167,6 +167,15 @@ export class BrowserCpu {
         return v1;
     }
     /**
+     * @returns {Uint32Array}
+     */
+    peripheral_trace() {
+        const ret = wasm.browsercpu_peripheral_trace(this.__wbg_ptr);
+        var v1 = getArrayU32FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v1;
+    }
+    /**
      * @param {number} index
      * @returns {number}
      */

@@ -34,6 +34,7 @@ export class BrowserCpu {
     load_sonix_firmware(bytes: Uint8Array | number[], device_key: number): void;
     constructor();
     peripheral_diagnostics(): Uint32Array;
+    peripheral_trace(): Uint32Array;
     register(index: number): number;
     reset_from_vectors(vector_base: number): void;
     rotate_dial(delta: number): void;
@@ -124,6 +125,7 @@ export interface InitOutput {
     readonly browsercpu_load_sonix_firmware: (a: number, b: number, c: number, d: number) => [number, number];
     readonly browsercpu_new: () => number;
     readonly browsercpu_peripheral_diagnostics: (a: number) => [number, number];
+    readonly browsercpu_peripheral_trace: (a: number) => [number, number];
     readonly browsercpu_register: (a: number, b: number) => [number, number, number];
     readonly browsercpu_reset_from_vectors: (a: number, b: number) => void;
     readonly browsercpu_rotate_dial: (a: number, b: number) => void;

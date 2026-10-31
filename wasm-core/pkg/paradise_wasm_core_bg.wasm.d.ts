@@ -22,6 +22,7 @@ export const browsercpu_load_flash: (a: number, b: number, c: number) => [number
 export const browsercpu_load_sonix_firmware: (a: number, b: number, c: number, d: number) => [number, number];
 export const browsercpu_new: () => number;
 export const browsercpu_peripheral_diagnostics: (a: number) => [number, number];
+export const browsercpu_peripheral_trace: (a: number) => [number, number];
 export const browsercpu_register: (a: number, b: number) => [number, number, number];
 export const browsercpu_reset_from_vectors: (a: number, b: number) => void;
 export const browsercpu_rotate_dial: (a: number, b: number) => void;
