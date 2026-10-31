@@ -90,6 +90,16 @@ self.onmessage = async (event) => {
       self.postMessage({ id, ok: true, result: { executed, instructions: cpu.instructions(), pc: cpu.register(15), halted: cpu.halted(), sleeping: cpu.sleeping(), fault: cpu.last_fault(), snapshot: Array.from(cpu.execution_snapshot()), codeWindow: Array.from(cpu.execution_window()) }});
       return;
     }
+        if (type === "run-until-pc") {
+      if (!cpu) throw new Error("CPU has not been created.");
+      const result = Array.from(cpu.run_until_pc(Number(payload.address) >>> 0, Number(payload.maxSteps) || 1000000));
+      self.postMessage({ id, ok: true, result: {
+        executed: result[0], reached: result[1] === 1, instructions: cpu.instructions(),
+        pc: cpu.register(15), halted: cpu.halted(), sleeping: cpu.sleeping(), fault: cpu.last_fault(),
+        snapshot: Array.from(cpu.execution_snapshot()), codeWindow: Array.from(cpu.execution_window())
+      }});
+      return;
+    }
     if (type === "input") {
       if (!cpu) throw new Error("CPU has not been created.");
       if (payload.button !== undefined) cpu.set_button(Number(payload.button), Boolean(payload.pressed));
