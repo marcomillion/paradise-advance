@@ -1,5 +1,5 @@
 //! Portable SNC73410 memory regions adapted from infinition/capybara (GPL-3.0-only).
-//! This is the memory-storage/bus boundary only; CPU and MMIO dispatch are not yet wired.
+//! Memory regions and the currently modelled SNC73410 bus/peripheral registers.
 
 pub const PRAM_BASE: u32 = 0x0000_0000;
 pub const PRAM_SIZE: usize = 64 * 1024;
