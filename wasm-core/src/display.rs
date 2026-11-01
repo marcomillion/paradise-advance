@@ -1,5 +1,4 @@
-//! Display controller boundary ported from Capybara's real hardware model.
-//! CPU/DMA integration remains a later porting step.
+//! 128x128 RGB565 panel buffer. Frames arrive through the observed DMA-to-SPI data path.
 
 pub const LCD_WIDTH: usize = 128;
 pub const LCD_HEIGHT: usize = 128;
@@ -12,7 +11,7 @@ pub struct DisplayController {
 impl DisplayController {
     pub fn new() -> Self {
         Self { ctrl: 1, fb_base_addr: 0x1800_8000, width: LCD_WIDTH,
-            height: LCD_HEIGHT, vram: vec![0x1084; LCD_WIDTH * LCD_HEIGHT],
+            height: LCD_HEIGHT, vram: vec![0; LCD_WIDTH * LCD_HEIGHT],
             enabled: true, dirty: true, frames_received: 0 }
     }
     pub fn read_reg(&self, offset: u32) -> u32 {
