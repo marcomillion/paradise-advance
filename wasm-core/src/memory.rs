@@ -36,6 +36,9 @@ pub struct MemoryStorage {
     snsys_registers: [u32; 1024],
     device_key: u32,
     snsys_pll_locked: bool,
+    // XIP controller remaps the 1 MiB cached window into the 16 MiB flash.
+    xip_base: u32,
+    xip_ctrl: u32,
     pub gpio_buttons: [bool; 4], pub dial_counter: i32,
     pub gpio_port_data: [u32; 3], pub gpio_port_direction: [u32; 3], pub gpio_port_mode: [u32; 3],
     pub gpio_port_irq_enable: [u32; 3], pub gpio_port_irq_status: [u32; 3],
@@ -59,6 +62,7 @@ impl MemoryStorage {
         Self { pram:vec![0;PRAM_SIZE], boot_rom, sram:vec![0;SRAM_SIZE],
             mailbox:vec![0;MAILBOX_SIZE], flash:vec![0xFF;FLASH_SIZE],
             snsys_registers:[0;1024], device_key:0, snsys_pll_locked:false,
+            xip_base:0x6000_0000, xip_ctrl:0,
             gpio_buttons:[false;4], dial_counter:0,
             gpio_port_data:[0;3], gpio_port_direction:[0;3], gpio_port_mode:[0;3],
             gpio_port_irq_enable:[0;3], gpio_port_irq_status:[0;3], gpio_port_cycles:0, gpio_te_high:true,
@@ -72,6 +76,14 @@ impl MemoryStorage {
     }
     /// Set the key read by retail firmware from the write-protected FEUSE registers.
     pub fn set_device_key(&mut self, key: u32) { self.device_key = key; }
+
+    fn xip_read_reg(&self, offset: u32) -> u32 {
+        match offset { 0x00 => self.xip_ctrl, 0x04 => self.xip_base, _ => 0 }
+    }
+
+    fn xip_write_reg(&mut self, offset: u32, value: u32) {
+        match offset { 0x00 => self.xip_ctrl = value, 0x04 => self.xip_base = value, _ => {} }
+    }
 
     fn snsys_read_reg(&self, offset: u32) -> u32 {
         match offset {
@@ -240,6 +252,10 @@ impl MemoryStorage {
         }
     }
     pub fn read_u8(&self, address: u32) -> u8 {
+        if (0x4002_F000..0x4002_F008).contains(&address) {
+            let value=self.xip_read_reg((address-0x4002_F000)&!3);
+            return ((value >> ((address&3)*8)) & 0xFF) as u8;
+        }
         if (0x4500_0000..0x4500_1000).contains(&address) {
             let value=self.snsys_read_reg((address-0x4500_0000)&!3);
             return ((value >> ((address&3)*8)) & 0xFF) as u8;
@@ -279,7 +295,7 @@ impl MemoryStorage {
             RegionKind::BootRom => (&self.boot_rom[..], (address-ROM_BASE) as usize),
             RegionKind::Sram => (&self.sram[..], (address-SRAM_BASE) as usize),
             RegionKind::Mailbox => (&self.mailbox[..], (address-MAILBOX_BASE) as usize),
-            RegionKind::Xip => (&self.flash[..], (address-XIP_BASE) as usize),
+            RegionKind::Xip => (&self.flash[..], (self.xip_base & 0x00FF_FFFF).wrapping_add(address-XIP_BASE) as usize),
             RegionKind::Flash => (&self.flash[..], (address-FLASH_BASE) as usize),
             RegionKind::Unmapped => return 0,
         };
@@ -315,6 +331,9 @@ impl MemoryStorage {
         value
     }
     pub fn read_u32(&self, address: u32) -> u32 {
+        if (0x4002_F000..0x4002_F008).contains(&address) {
+            return self.xip_read_reg((address-0x4002_F000)&!3);
+        }
         if (0x4500_0000..0x4500_1000).contains(&address) {
             return self.snsys_read_reg((address-0x4500_0000)&!3);
         }
@@ -326,6 +345,15 @@ impl MemoryStorage {
             self.read_u8(address.wrapping_add(2)),self.read_u8(address.wrapping_add(3))])
     }
     pub fn write_u32(&mut self,address:u32,value:u32)->bool {
+        if (0x4002_F000..0x4002_F008).contains(&address) {
+            if address&3!=0 { return false; }
+            self.peripheral_write_count=self.peripheral_write_count.wrapping_add(4);
+            self.peripheral_last_write_address=address.wrapping_add(3);
+            self.peripheral_last_write_value=(value>>24)&0xFF;
+            for i in 0..4 { self.trace_peripheral(1,address.wrapping_add(i),(value>>(i*8))&0xFF); }
+            self.xip_write_reg(address-0x4002_F000,value);
+            return true;
+        }
         if (0x4500_0000..0x4500_1000).contains(&address) {
             if address&3!=0 { return false; }
             self.peripheral_write_count=self.peripheral_write_count.wrapping_add(4);
@@ -363,6 +391,14 @@ impl MemoryStorage {
             self.peripheral_last_write_address=address;
             self.peripheral_last_write_value=value as u32;
             self.trace_peripheral(1,address,value as u32);
+        }
+        if (0x4002_F000..0x4002_F008).contains(&address) {
+            let offset=(address-0x4002_F000)&!3;
+            let shift=(address&3)*8;
+            let current=self.xip_read_reg(offset);
+            let mask=!(0xFFu32<<shift);
+            self.xip_write_reg(offset,(current&mask)|((value as u32)<<shift));
+            return true;
         }
         if (0x4500_0000..0x4500_1000).contains(&address) {
             let offset=(address-0x4500_0000)&!3;
@@ -618,6 +654,20 @@ mod tests {
         assert_eq!(&trace[0..3],&[1,0x4500_0001,1]);
         assert_eq!(&trace[93..96],&[1,0x4500_0020,32]);
     }
+
+    #[test]
+    fn xip_controller_remaps_cached_window_to_selected_flash_region() {
+        let mut m=MemoryStorage::new();
+        m.flash[0x1010..0x1014].copy_from_slice(&[0x12,0x34,0x56,0x78]);
+        assert_eq!(m.read_u32(XIP_BASE+0x10),u32::from_le_bytes([0xFF;4]));
+        assert!(m.write_u32(0x4002_F004,FLASH_BASE+0x1000));
+        assert!(m.write_u32(0x4002_F000,3));
+        assert_eq!(m.read_u32(0x4002_F004),FLASH_BASE+0x1000);
+        assert_eq!(m.read_u32(0x4002_F000),3);
+        assert_eq!(m.read_u32(XIP_BASE+0x10),0x7856_3412);
+        assert_eq!(m.read_u32(FLASH_BASE+0x1010),0x7856_3412);
+    }
+
     #[test]
     fn spi0_control_status_and_data_registers_are_mapped() {
         let mut m=MemoryStorage::new();
