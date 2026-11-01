@@ -303,6 +303,40 @@ mod browser_integration_tests {
     }
 
     #[test]
+    fn firmware_cpu_programmed_dma_transfer_reaches_display_framebuffer() {
+        let mut cpu = BrowserCpu::new();
+        // A tiny Thumb-2 firmware routine programs DMA channel 0 exactly as
+        // the retail driver does: source, SPI DATA destination, halfword count,
+        // then CTRL.START. Four STR.W instructions perform the MMIO writes.
+        cpu.memory.sram[0x100..0x104].copy_from_slice(&[
+            0xE0, 0x07, 0x1F, 0x00, // RGB565 green, blue
+        ]);
+        cpu.memory.pram[0..16].copy_from_slice(&[
+            0xC1, 0xF8, 0x08, 0x20, // STR.W r2, [r1, #8]  SOURCE
+            0xC1, 0xF8, 0x0C, 0x30, // STR.W r3, [r1, #12] DESTINATION
+            0xC1, 0xF8, 0x14, 0x40, // STR.W r4, [r1, #20] COUNT
+            0xC1, 0xF8, 0x00, 0x50, // STR.W r5, [r1, #0]  START
+        ]);
+        cpu.cpu.r[1] = 0x4000_F100;
+        cpu.cpu.r[2] = crate::memory::SRAM_BASE + 0x100;
+        cpu.cpu.r[3] = 0x4000_E01C;
+        cpu.cpu.r[4] = 2; // two RGB565 pixels
+        cpu.cpu.r[5] = 1; // DMA START
+        cpu.cpu.r[15] = 0;
+
+        assert_eq!(cpu.run_steps(4), 4);
+        let frame = cpu.display_rgba_framebuffer();
+        assert_eq!(&frame[0..4], &[0, 255, 0, 255]);
+        assert_eq!(&frame[4..8], &[0, 0, 255, 255]);
+        assert_eq!(cpu.display_frames_received(), 1);
+        let diagnostics = cpu.dma_diagnostics();
+        assert_eq!(diagnostics[3], 1); // one actual DMA transfer
+        assert_eq!(diagnostics[4], crate::memory::SRAM_BASE + 0x100);
+        assert_eq!(diagnostics[5], 0x4000_E01C);
+        assert_eq!(diagnostics[6], 2);
+    }
+
+    #[test]
     fn run_until_pc_stops_before_breakpoint_instruction() {
         let mut cpu=BrowserCpu::new();
         cpu.memory.pram[0..4].copy_from_slice(&[0x2A,0x20,0xFE,0xE7]); // MOVS r0,#42; B .
