@@ -1089,7 +1089,7 @@ mod tests {
         m.pram[0..6].copy_from_slice(&[0x00,0xBF,0x00,0xBF,0x00,0xBF]);
         m.pram[0x3C..0x40].copy_from_slice(&0x1000_0101u32.to_le_bytes());
         m.flash[0x100..0x102].copy_from_slice(&0x4770u16.to_le_bytes());
-        m.write_u8(0xE000_E014,2);
+        m.write_u32(0xE000_E014,4_799); // 3 × 1,600-cycle CPU steps to the first tick
         m.write_u8(0xE000_E010,3); // SysTick ENABLE | TICKINT
         let mut c=ThumbCpu::new(); c.r[13]=crate::memory::SRAM_BASE+crate::memory::SRAM_SIZE as u32;
         c.r[15]=0;
