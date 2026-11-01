@@ -370,3 +370,26 @@ test('imported workspace backup persists and restores its selected animation fra
   await expect(page.locator('#animationFrameCount')).toHaveText('2 frames');
   await expect(page.locator('#animationPreviewLabel')).toHaveText('Frame 2 of 2');
 });
+
+
+test('the same sprite project can be imported repeatedly without stale file inputs', async ({ page }) => {
+  const project = {
+    format: 'paradise-mod-studio-sprite',
+    version: 1,
+    name: 'Repeat Import',
+    width: 1,
+    height: 1,
+    pixels: ['#abcdef'],
+    palette: ['#abcdef']
+  };
+  const file = {
+    name: 'repeat-import.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(project))
+  };
+
+  await page.locator('#spriteInput').setInputFiles(file);
+  await expect(page.locator('#spriteCount')).toHaveText('1');
+  await page.locator('#spriteInput').setInputFiles(file);
+  await expect(page.locator('#spriteCount')).toHaveText('2');
+});
