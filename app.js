@@ -68,7 +68,7 @@ function exportBlob(blob,name){const a=document.createElement('a');a.href=URL.cr
 function exportPng(s=active(),filename){if(!s)return toast('Create or select a sprite first');const c=document.createElement('canvas');drawSprite(c,s);c.toBlob(blob=>exportBlob(blob,filename||s.name.replace(/[^a-z0-9_-]+/gi,'_')+'.png'))}
 function exportJson(s=active()){if(!s)return toast('Create or select a sprite first');exportBlob(new Blob([JSON.stringify({format:'paradise-mod-studio-sprite',version:1,name:s.name,width:s.width,height:s.height,palette:s.palette,pixels:s.pixels},null,2)],{type:'application/json'}),s.name.replace(/[^a-z0-9_-]+/gi,'_')+'.json')}
 function exportWorkspace(){
- const payload={format:'paradise-mod-studio-workspace',version:1,sprites:state.sprites,gallery:state.gallery,activeId:state.activeId,color:state.color,grid:state.grid,zoom:state.zoom,animation:{fps:Number($('animationFps').value)||4,frames:animationState.frames.map(f=>({name:f.name,width:f.width,height:f.height,pixels:f.pixels,palette:f.palette}))}};
+ const payload={format:'paradise-mod-studio-workspace',version:1,sprites:state.sprites,gallery:state.gallery,activeId:state.activeId,color:state.color,grid:state.grid,zoom:state.zoom,animation:{fps:Number($('animationFps').value)||4,selected:animationState.selected,frames:animationState.frames.map(f=>({name:f.name,width:f.width,height:f.height,pixels:f.pixels,palette:f.palette}))}};
  exportBlob(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),'paradise-mod-studio-workspace.json');
 }
 function normaliseWorkspaceSprite(s){
@@ -96,13 +96,13 @@ async function importWorkspaceFile(file){
   if(typeof data.grid==='boolean')state.grid=data.grid;
   if(Number.isFinite(data.zoom))state.zoom=Math.max(4,Math.min(20,data.zoom));
   state.history=[];state.redo=[];
-  animationState.frames=frames;animationState.selected=frames.length?0:-1;stopAnimation();
+  animationState.frames=frames;animationState.selected=frames.length?Math.max(0,Math.min(frames.length-1,Number.isInteger(data.animation?.selected)?data.animation.selected:0)):-1;stopAnimation();
   $('colorPicker').value=state.color;$('gridToggle').checked=state.grid;$('zoomSlider').value=String(state.zoom);$('zoomValue').textContent=state.zoom+'×';
   $('animationFps').value=String(Math.max(1,Math.min(12,Number(data.animation?.fps)||4)));$('animationFpsValue').textContent=$('animationFps').value;
   renderAnimationStrip();
-  if(frames.length){drawAnimationFrame(frames[0],$('animationPreviewCanvas'));$('animationPreviewLabel').textContent='Frame 1 of '+frames.length;}
+  if(frames.length){const selectedFrame=frames[animationState.selected];drawAnimationFrame(selectedFrame,$('animationPreviewCanvas'));$('animationPreviewLabel').textContent='Frame '+(animationState.selected+1)+' of '+frames.length;}
   else{$('animationPreviewLabel').textContent='Preview idle';}
-  renderAll();toast('Workspace backup imported');
+  renderAll();scheduleWorkspaceSave();toast('Workspace backup imported');
  }catch(error){toast('Workspace import failed: '+(error.message||String(error)));}
 }
 
