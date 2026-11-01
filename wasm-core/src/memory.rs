@@ -579,6 +579,8 @@ impl MemoryStorage {
         }
         if (0x4000_F000..0x4000_F138).contains(&address) {
             let offset=address-0x4000_F000;
+            // DMA STATUS is hardware-owned/read-only; ACQUIT at +0x08 is W1C.
+            if offset < 0x04 { return true; }
             let word=(offset/4) as usize;
             let shift=(offset&3)*8;
             let mask=!(0xffu32<<shift);
@@ -671,6 +673,18 @@ mod tests {
             assert!(memory.dma_irq_pending);
             assert_eq!(memory.dma_registers[0x100 / 4] & 1, 0);
         }
+    }
+
+    #[test]
+    fn dma_status_is_read_only_and_acknowledge_is_write_one_to_clear() {
+        let mut memory = MemoryStorage::new();
+        memory.dma_registers[0] = 0b11;
+        assert!(memory.write_u32(0x4000_F000, 0));
+        assert_eq!(memory.read_u32(0x4000_F000), 0b11);
+        assert!(memory.write_u32(0x4000_F008, 0b01));
+        assert_eq!(memory.read_u32(0x4000_F000), 0b10);
+        assert!(memory.write_u32(0x4000_F008, 0b10));
+        assert_eq!(memory.read_u32(0x4000_F000), 0);
     }
 
     #[test] fn maps_known_hardware_regions() {
