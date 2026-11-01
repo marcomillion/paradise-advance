@@ -158,7 +158,6 @@ impl BrowserCpu {
     pub fn step(&mut self)->Result<(),JsValue> {
         let result=self.cpu.step(&mut self.memory).map_err(|e|JsValue::from_str(&format!("{:?}",e)));
         if let Some(frame)=self.memory.panel_frame.take() { self.display.receive_frame(&frame); }
-        else { self.display.sync_from_sram(&self.memory.sram); }
         result
     }
     pub fn run_steps(&mut self,count:u32)->u32 {
@@ -169,7 +168,6 @@ impl BrowserCpu {
             if self.cpu.instructions!=before { done+=1; }
         }
         if let Some(frame)=self.memory.panel_frame.take() { self.display.receive_frame(&frame); }
-        else { self.display.sync_from_sram(&self.memory.sram); }
         done
     }
     /// Execute until the PC reaches an address, stopping before that instruction.
@@ -186,7 +184,6 @@ impl BrowserCpu {
             reached=(self.cpu.r[15]&!1)==target;
         }
         if let Some(frame)=self.memory.panel_frame.take() { self.display.receive_frame(&frame); }
-        else { self.display.sync_from_sram(&self.memory.sram); }
         vec![done,reached as u32,self.cpu.r[15]]
     }
     pub fn display_width(&self)->u32 {self.display.width() as u32}
@@ -293,6 +290,14 @@ mod browser_integration_tests {
         let frame=cpu.display_rgba_framebuffer();
         assert_eq!(&frame[0..4],&[0,255,0,255]);
         assert_eq!(&frame[4..8],&[0,0,255,255]);
+        // A later CPU step without a new DMA frame must not replace the panel
+        // contents with an unverified SRAM snapshot.
+        cpu.memory.pram[2..4].copy_from_slice(&0xBF00u16.to_le_bytes());
+        cpu.step().unwrap();
+        let persistent=cpu.display_rgba_framebuffer();
+        assert_eq!(&persistent[0..4],&[0,255,0,255]);
+        assert_eq!(&persistent[4..8],&[0,0,255,255]);
+        assert_eq!(cpu.display_frames_received(),1);
     }
 
     #[test]
