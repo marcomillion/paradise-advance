@@ -364,6 +364,7 @@ mod browser_integration_tests {
 
         let mut cpu = BrowserCpu::new();
         cpu.load_sonix_firmware(&image, 0).expect("synthetic image should load");
+        assert_eq!(cpu.memory.read_u32(0x4500_003C),0);
         assert_eq!(cpu.register(13).unwrap(), crate::memory::SRAM_BASE + crate::memory::SRAM_SIZE as u32 - 16);
         assert_eq!(cpu.register(15).unwrap(), 0x100);
         assert_eq!(cpu.memory.read_u32(crate::memory::MAILBOX_BASE+0xF60),crate::memory::MAILBOX_BASE);
@@ -379,6 +380,12 @@ mod browser_integration_tests {
         let mut cpu_with_sram_region=BrowserCpu::new();
         cpu_with_sram_region.load_sonix_firmware(&image,0).unwrap();
         assert_eq!(cpu_with_sram_region.memory.read_u32(crate::memory::MAILBOX_BASE+0x818),0x6002_0000);
+
+        // The firmware reads the physical device key back from FEUSE3.
+        let mut cpu_with_key=BrowserCpu::new();
+        cpu_with_key.load_sonix_firmware(&image,0x1234_5678).unwrap();
+        assert_eq!(cpu_with_key.memory.read_u32(0x4500_0038),0x1234_0000);
+        assert_eq!(cpu_with_key.memory.read_u32(0x4500_003C),0x1234_5678);
     }
 
     #[test]
