@@ -240,6 +240,7 @@ fn load_sonix_firmware_inner(cpu:&mut BrowserCpu, bytes:&[u8], device_key:u32) -
     // Commit the validated image only after every structural check succeeds.
     cpu.memory.load_flash(&decrypted)?;
     cpu.memory.load_pram(region);
+    cpu.memory.set_device_key(device_key);
 
     // Reproduce the two boot-info fields the retail firmware reads after the
     // boot ROM has copied user code into PRAM.
