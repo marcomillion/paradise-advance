@@ -169,7 +169,7 @@ const keyboardButtonMap={ArrowLeft:'C',ArrowRight:'A',Enter:'B',Escape:'C'};
   const button=keyboardButtonMap[e.key];
   if(button)reportDeviceInput('Keyboard released '+button+' button',{type:'button',button,pressed:false,source:'keyboard'});
  });
- $('previewBg').oninput=renderPreview;$('previewScale').oninput=renderPreview;$('previewChecker').onchange=renderPreview;$('downloadPreviewBtn').onclick=()=>{const c=$('previewCanvas');c.toBlob(blob=>exportBlob(blob,'paradise-preview.png'))};$('emulatorLoadFirmwareBtn').onclick=()=>$('firmwareInput').click();
+ $('previewBg').oninput=renderPreview;$('previewScale').oninput=renderPreview;$('previewChecker').onchange=renderPreview;$('downloadPreviewBtn').onclick=()=>{const c=$('previewCanvas');c.toBlob(blob=>exportBlob(blob,'paradise-preview.png'))};
 restoreWorkspace();
 renderAnimationStrip();
 if(animationState.frames.length){
