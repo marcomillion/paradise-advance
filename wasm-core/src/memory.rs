@@ -34,7 +34,8 @@ pub struct MemoryStorage {
     pub mailbox: Vec<u8>, pub flash: Vec<u8>,
     // SNC73410 SN_SYS0 register bank at 0x45000000, including FEUSE key words.
     snsys_registers: [u32; 1024],
-    // SYSCTRL0 register page at 0x40004000 (oscillator, pin control, clock).
+    // PMU page at 0x40001000 and SYSCTRL0 at 0x40004000.
+    pmu_registers: [u32; 6],
     sysctrl0_registers: [u32; 1024],
     boot_rom_hidden: bool,
     device_key: u32,
@@ -64,9 +65,11 @@ impl MemoryStorage {
         boot_rom[0x40..0x46].copy_from_slice(&[0x00,0xBF,0x01,0x20,0xFE,0xE7]);
         let mut sysctrl0_registers = [0; 1024];
         sysctrl0_registers[0x24 / 4] = 0x01;
+        let mut pmu_registers = [0; 6];
+        pmu_registers[2] = 0x50;
         Self { pram:vec![0;PRAM_SIZE], boot_rom, sram:vec![0;SRAM_SIZE],
             mailbox:vec![0;MAILBOX_SIZE], flash:vec![0xFF;FLASH_SIZE],
-            snsys_registers:[0;1024], sysctrl0_registers, boot_rom_hidden:false,
+            snsys_registers:[0;1024], pmu_registers, sysctrl0_registers, boot_rom_hidden:false,
             device_key:0, snsys_pll_locked:false,
             xip_base:0x6000_0000, xip_ctrl:0,
             gpio_buttons:[false;4], dial_counter:0,
@@ -89,6 +92,24 @@ impl MemoryStorage {
 
     fn xip_write_reg(&mut self, offset: u32, value: u32) {
         match offset { 0x00 => self.xip_ctrl = value, 0x04 => self.xip_base = value, _ => {} }
+    }
+
+    fn pmu_read_reg(&self, offset: u32) -> u32 {
+        match offset {
+            0x00..=0x14 if offset % 4 == 0 => self.pmu_registers[(offset / 4) as usize],
+            _ => 0,
+        }
+    }
+
+    fn pmu_write_reg(&mut self, offset: u32, value: u32) {
+        if offset % 4 != 0 || offset > 0x14 { return; }
+        let index = (offset / 4) as usize;
+        if offset == 0x04 {
+            // PMU status flags are write-one-to-clear.
+            self.pmu_registers[index] &= !value;
+        } else {
+            self.pmu_registers[index] = value;
+        }
     }
 
     fn sysctrl0_read_reg(&self, offset: u32) -> u32 {
@@ -294,6 +315,10 @@ impl MemoryStorage {
             let value=self.xip_read_reg((address-0x4002_F000)&!3);
             return ((value >> ((address&3)*8)) & 0xFF) as u8;
         }
+        if (0x4000_1000..0x4000_1018).contains(&address) {
+            let value=self.pmu_read_reg((address-0x4000_1000)&!3);
+            return ((value >> ((address&3)*8)) & 0xFF) as u8;
+        }
         if (0x4000_4000..0x4000_5000).contains(&address) {
             let value=self.sysctrl0_read_reg((address-0x4000_4000)&!3);
             return ((value >> ((address&3)*8)) & 0xFF) as u8;
@@ -442,6 +467,14 @@ impl MemoryStorage {
             self.xip_write_reg(offset,(current&mask)|((value as u32)<<shift));
             return true;
         }
+        if (0x4000_1000..0x4000_1018).contains(&address) {
+            let offset=(address-0x4000_1000)&!3;
+            let shift=(address&3)*8;
+            let current=self.pmu_read_reg(offset);
+            let mask=!(0xFFu32<<shift);
+            self.pmu_write_reg(offset,(current&mask)|((value as u32)<<shift));
+            return true;
+        }
         if (0x4000_4000..0x4000_5000).contains(&address) {
             let offset=(address-0x4000_4000)&!3;
             let shift=(address&3)*8;
@@ -578,6 +611,22 @@ mod tests {
         assert_eq!(region_for(FLASH_BASE),RegionKind::Flash);
         assert_eq!(region_for(0x4000_0000),RegionKind::Unmapped);
     }
+    #[test]
+    fn pmu_registers_retain_configuration_and_clear_status_flags() {
+        let mut memory = MemoryStorage::new();
+        assert_eq!(memory.read_u32(0x4000_1008), 0x50);
+        assert_eq!(memory.read_u32(0x4000_1000), 0);
+        assert!(memory.write_u32(0x4000_1000, 0x02));
+        assert!(memory.write_u32(0x4000_1008, 0xA5));
+        assert!(memory.write_u32(0x4000_100C, 0x1234));
+        assert_eq!(memory.read_u32(0x4000_1000), 0x02);
+        assert_eq!(memory.read_u32(0x4000_1008), 0xA5);
+        assert_eq!(memory.read_u32(0x4000_100C), 0x1234);
+
+        assert!(memory.write_u32(0x4000_1004, 0xC0));
+        assert_eq!(memory.read_u32(0x4000_1004), 0);
+    }
+
     #[test]
     fn sysctrl0_models_clock_registers_and_boot_rom_mirror() {
         let mut memory = MemoryStorage::new();
