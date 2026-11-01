@@ -512,6 +512,17 @@ mod tests {
         assert_eq!(&trace[12..15],&[0,0x4000_E000,0x12345678]);
     }
     #[test]
+    fn unknown_snc_peripheral_reads_are_visible_in_trace() {
+        let mut m=MemoryStorage::new();
+        // This firmware address is outside the currently modelled peripheral blocks.
+        // Keep the observed open-bus value explicit instead of inventing a register model.
+        assert_eq!(m.read_cpu_u32(0x4500_0000),0);
+        assert_eq!(m.peripheral_read_count,1);
+        assert_eq!(m.peripheral_last_read_address,0x4500_0000);
+        assert_eq!(m.peripheral_last_read_value,0);
+        assert_eq!(m.peripheral_trace(),vec![0,0x4500_0000,0]);
+    }
+    #[test]
     fn peripheral_trace_retains_only_the_latest_32_accesses() {
         let mut m=MemoryStorage::new();
         for i in 0..33u32 {
