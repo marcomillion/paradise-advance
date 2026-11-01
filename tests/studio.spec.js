@@ -338,3 +338,35 @@ test('unsupported animation project versions are rejected safely', async ({ page
   await expect(page.locator('#toast')).toContainText('version is not supported');
   await expect(page.locator('#animationFrameCount')).toHaveText('0 frames');
 });
+
+
+test('imported workspace backup persists and restores its selected animation frame', async ({ page }) => {
+  const frame = (name, color) => ({
+    name, width: 1, height: 1, pixels: [color], palette: [color]
+  });
+  const backup = {
+    format: 'paradise-mod-studio-workspace',
+    version: 1,
+    sprites: [{ id: 'backup-sprite', name: 'Backup Sprite', width: 1, height: 1, pixels: ['#112233'], palette: ['#112233'] }],
+    gallery: [],
+    activeId: 'backup-sprite',
+    animation: { fps: 8, selected: 1, frames: [frame('First', '#ff0000'), frame('Second', '#00ff00')] }
+  };
+
+  await page.locator('#workspaceInput').setInputFiles({
+    name: 'workspace-backup.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(backup))
+  });
+
+  await expect(page.locator('#animationPreviewLabel')).toHaveText('Frame 2 of 2');
+  await expect.poll(() => page.evaluate(() => {
+    const saved = JSON.parse(localStorage.getItem('paradiseModStudio.workspace.v1') || '{}');
+    return saved.animation?.selected === 1 && saved.sprites?.[0]?.name === 'Backup Sprite';
+  })).toBe(true);
+
+  await page.reload();
+  await expect(page.locator('#spriteName')).toHaveValue('Backup Sprite');
+  await expect(page.locator('#animationFrameCount')).toHaveText('2 frames');
+  await expect(page.locator('#animationPreviewLabel')).toHaveText('Frame 2 of 2');
+});
