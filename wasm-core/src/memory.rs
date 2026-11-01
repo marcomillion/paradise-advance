@@ -592,7 +592,8 @@ impl MemoryStorage {
                 self.dma_registers[2]=0;
             }
             // Channel CTRL is acted on only after its complete word is written.
-            if offset>=0x100 && (offset-0x100)%0x20==0x03 {
+            // Start on CTRL bit 0, including a bit-band write to its low byte.
+            if offset>=0x100 && (offset-0x100)%0x20==0 {
                 let channel=((offset-0x100)/0x20) as usize;
                 let ctrl_word=(0x100/4)+channel*8;
                 if self.dma_registers[ctrl_word]&1!=0 {
@@ -645,6 +646,33 @@ impl Default for MemoryStorage { fn default() -> Self { Self::new() } }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dma_starts_when_ctrl_start_bit_is_written_as_a_byte_or_bitband_bit() {
+        for bitband in [false, true] {
+            let mut memory = MemoryStorage::new();
+            memory.write_u8(SRAM_BASE + 0x100, 0x00);
+            memory.write_u8(SRAM_BASE + 0x101, 0xF8);
+            memory.write_u8(SRAM_BASE + 0x102, 0x1F);
+            memory.write_u8(SRAM_BASE + 0x103, 0x00);
+            assert!(memory.write_u32(0x4000_F108, SRAM_BASE + 0x100));
+            assert!(memory.write_u32(0x4000_F10C, 0x4000_E01C));
+            assert!(memory.write_u32(0x4000_F114, 2));
+            if bitband {
+                // Alias for DMA channel 0 CTRL bit 0.
+                assert!(memory.write_u32(0x421E_2000, 1));
+            } else {
+                assert!(memory.write_u8(0x4000_F100, 1));
+            }
+            assert_eq!(memory.dma_transfer_attempts, 1);
+            assert_eq!(memory.dma_last_source, SRAM_BASE + 0x100);
+            assert_eq!(memory.dma_last_destination, 0x4000_E01C);
+            assert_eq!(memory.dma_last_units, 2);
+            assert_eq!(memory.panel_frame.as_deref(), Some(&[0xF800, 0x001F][..]));
+            assert!(memory.dma_irq_pending);
+            assert_eq!(memory.dma_registers[0x100 / 4] & 1, 0);
+        }
+    }
+
     #[test] fn maps_known_hardware_regions() {
         assert_eq!(region_for(0),RegionKind::Pram);
         assert_eq!(region_for(ROM_BASE),RegionKind::BootRom);
