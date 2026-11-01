@@ -6,6 +6,7 @@ mod cpu;
 mod display;
 mod sonix;
 mod memory;
+mod emulator;
 use wasm_bindgen::prelude::*;
 pub use display::{DisplayController, LCD_HEIGHT, LCD_WIDTH};
 pub use sonix::{find_tables, decrypt_dump_with_key, search_device_key_chunk as search_key_chunk, CipherMode, LoadTable, Region};
@@ -532,5 +533,127 @@ mod browser_integration_tests {
         assert!(error.contains("Initial stack pointer"));
         assert_eq!(cpu.memory.pram[0], 0xA5);
         assert_eq!(cpu.memory.flash[0], 0x5A);
+    }
+}
+
+
+// Browser adapter for the Capybara SNC73410 engine. The website owns the
+// canvas, controls, firmware bytes, and scheduling; this struct owns the
+// actual CPU, memory bus, and chip peripherals.
+#[wasm_bindgen]
+pub struct BrowserCapybara {
+    cpu: emulator::Cpu,
+    bus: emulator::MemoryBus,
+    peripherals: emulator::Peripherals,
+    loaded: bool,
+}
+
+#[wasm_bindgen]
+impl BrowserCapybara {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> BrowserCapybara {
+        BrowserCapybara {
+            cpu: emulator::Cpu::new(),
+            bus: emulator::MemoryBus::default(),
+            peripherals: emulator::Peripherals::default(),
+            loaded: false,
+        }
+    }
+
+    /// Load and decrypt a real 16 MiB Sonix flash dump with the user's device key.
+    /// Firmware bytes remain in browser memory and are never uploaded by this core.
+    pub fn load_firmware(&mut self, bytes: &[u8], device_key: u32) -> Result<(), JsValue> {
+        if bytes.len() != 16 * 1024 * 1024 {
+            return Err(JsValue::from_str("Expected a 16 MiB flash dump."));
+        }
+        if !emulator::SonixImage::is_sonix(bytes) {
+            return Err(JsValue::from_str("No supported Sonix load table found."));
+        }
+        let image = emulator::SonixImage::load(bytes, Some(device_key))
+            .map_err(|e| JsValue::from_str(&format!("Sonix load failed: {:?}", e)))?;
+        if !image.decrypted {
+            return Err(JsValue::from_str("Firmware is encrypted and could not be decrypted."));
+        }
+        let table = image.primary().clone();
+        let src = table.user_code.flash_offset();
+        let end = src.saturating_add(table.user_code.len as usize).min(image.flash.len());
+        if src >= end {
+            return Err(JsValue::from_str("The user-code region is empty or outside the flash dump."));
+        }
+
+        self.bus = emulator::MemoryBus::default();
+        self.peripherals = emulator::Peripherals::default();
+        self.bus.flash.load_binary(0, &image.flash);
+        self.bus.pram.load(&image.flash[src..end]);
+
+        // Recreate the two boot-info fields written by Capybara's boot loader:
+        // the mailbox pointer and the XIP base used by the firmware.
+        let mailbox = &mut self.bus.sram.mailbox;
+        let boot_info_ptr = 0xF60usize;
+        let xip_base_field = 0x818usize;
+        mailbox[boot_info_ptr..boot_info_ptr + 4]
+            .copy_from_slice(&0x2000_0000u32.to_le_bytes());
+        let xip_base = if table.sram_code.addr != 0 {
+            table.sram_code.addr
+        } else {
+            table.user_code.addr.wrapping_add(table.user_code.len)
+        };
+        mailbox[xip_base_field..xip_base_field + 4]
+            .copy_from_slice(&xip_base.to_le_bytes());
+
+        self.peripherals.fuses.device_key = Some(device_key);
+        self.cpu = emulator::Cpu::new();
+        self.cpu.reset(&mut self.bus, &mut self.peripherals);
+        self.loaded = true;
+        Ok(())
+    }
+
+    pub fn reset(&mut self) {
+        if self.loaded {
+            self.cpu.reset(&mut self.bus, &mut self.peripherals);
+        }
+    }
+
+    /// Execute at most one million CPU steps per call to keep browser work bounded.
+    pub fn run_steps(&mut self, count: u32) -> u32 {
+        if !self.loaded || self.cpu.is_halted { return 0; }
+        let mut executed = 0u32;
+        for _ in 0..count.min(1_000_000) {
+            if self.cpu.is_halted { break; }
+            let _ = self.cpu.step(&mut self.bus, &mut self.peripherals);
+            executed = executed.saturating_add(1);
+        }
+        executed
+    }
+
+    pub fn step(&mut self) -> bool {
+        if !self.loaded || self.cpu.is_halted { return false; }
+        let _ = self.cpu.step(&mut self.bus, &mut self.peripherals);
+        !self.cpu.is_halted
+    }
+
+    pub fn loaded(&self) -> bool { self.loaded }
+    pub fn halted(&self) -> bool { self.cpu.is_halted }
+    pub fn pc(&self) -> u32 { self.cpu.regs.pc }
+    pub fn sp(&self) -> u32 { self.cpu.regs.msp }
+    pub fn cycles(&self) -> u64 { self.cpu.cycles }
+
+    pub fn display_width(&self) -> u32 { self.peripherals.display.width as u32 }
+    pub fn display_height(&self) -> u32 { self.peripherals.display.height as u32 }
+    pub fn display_frames(&self) -> u32 { self.peripherals.display.trames as u32 }
+    pub fn display_rgba(&self) -> Vec<u8> {
+        let mut rgba = Vec::with_capacity(self.peripherals.display.vram.len() * 4);
+        for &pixel in &self.peripherals.display.vram {
+            let r = ((pixel >> 11) & 0x1F) as u8;
+            let g = ((pixel >> 5) & 0x3F) as u8;
+            let b = (pixel & 0x1F) as u8;
+            rgba.extend_from_slice(&[
+                (r << 3) | (r >> 2),
+                (g << 2) | (g >> 4),
+                (b << 3) | (b >> 2),
+                255,
+            ]);
+        }
+        rgba
     }
 }
