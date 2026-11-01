@@ -76,6 +76,8 @@ impl MemoryStorage {
     }
     /// Set the key read by retail firmware from the write-protected FEUSE registers.
     pub fn set_device_key(&mut self, key: u32) { self.device_key = key; }
+    /// Select the flash address exposed through the 1 MiB XIP window at 0x10000000.
+    pub fn set_xip_base(&mut self, address: u32) { self.xip_base = address; }
 
     fn xip_read_reg(&self, offset: u32) -> u32 {
         match offset { 0x00 => self.xip_ctrl, 0x04 => self.xip_base, _ => 0 }
