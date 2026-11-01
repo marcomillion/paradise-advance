@@ -640,19 +640,31 @@ impl BrowserCapybara {
     pub fn register(&self, index: u32) -> u32 {
         if index < 16 { self.cpu.regs.get_reg(index as u8) } else { 0 }
     }
-    pub fn execution_snapshot(&self) -> Vec<u32> {
+    pub fn execution_snapshot(&mut self) -> Vec<u32> {
+        let pc = self.cpu.regs.pc & !1;
+        let next = self.bus.read_u16(pc, &mut self.peripherals, &self.cpu.nvic) as u32;
+        let previous = self.bus.read_u16(pc.wrapping_sub(2), &mut self.peripherals, &self.cpu.nvic) as u32;
         let mut out = Vec::with_capacity(19);
         out.extend_from_slice(&self.cpu.regs.r);
         out.push(self.cpu.regs.get_sp());
         out.push(self.cpu.regs.lr);
-        out.push(self.cpu.regs.pc);
-        out.push(0);
-        out.push(0);
+        out.push(pc);
+        out.push(next);
+        out.push(previous);
         out.push(self.cpu.regs.xpsr);
         out
     }
-    pub fn execution_window(&self) -> Vec<u32> {
-        vec![self.cpu.regs.pc, 0]
+    pub fn execution_window(&mut self) -> Vec<u32> {
+        let pc = self.cpu.regs.pc & !1;
+        let start = pc.saturating_sub(32) & !1;
+        let mut out = Vec::with_capacity(66);
+        for index in 0..33u32 {
+            let address = start.wrapping_add(index * 2);
+            let opcode = self.bus.read_u16(address, &mut self.peripherals, &self.cpu.nvic) as u32;
+            out.push(address);
+            out.push(opcode);
+        }
+        out
     }
     pub fn set_button(&mut self, index: u32, pressed: bool) -> Result<(), JsValue> {
         let pin = match index {
@@ -685,6 +697,13 @@ impl BrowserCapybara {
     pub fn display_width(&self) -> u32 { self.peripherals.display.width as u32 }
     pub fn display_height(&self) -> u32 { self.peripherals.display.height as u32 }
     pub fn display_frames(&self) -> u32 { self.peripherals.display.trames as u32 }
+    pub fn display_enabled(&self) -> bool { self.peripherals.display.is_enabled }
+    pub fn display_nonzero_pixels(&self) -> u32 {
+        self.peripherals.display.vram.iter().filter(|&&pixel| pixel != 0).count() as u32
+    }
+    pub fn display_pixel_checksum(&self) -> u32 {
+        self.peripherals.display.vram.iter().fold(0u32, |sum, &pixel| sum.wrapping_add(pixel as u32))
+    }
     pub fn display_rgba(&self) -> Vec<u8> {
         let mut rgba = Vec::with_capacity(self.peripherals.display.vram.len() * 4);
         for &pixel in &self.peripherals.display.vram {
