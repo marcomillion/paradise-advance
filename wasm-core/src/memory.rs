@@ -470,9 +470,14 @@ impl MemoryStorage {
         if (0x4000_1000..0x4000_1018).contains(&address) {
             let offset=(address-0x4000_1000)&!3;
             let shift=(address&3)*8;
-            let current=self.pmu_read_reg(offset);
-            let mask=!(0xFFu32<<shift);
-            self.pmu_write_reg(offset,(current&mask)|((value as u32)<<shift));
+            if offset == 0x04 {
+                // Status is W1C: never read-modify-write its existing one bits.
+                self.pmu_write_reg(offset,(value as u32)<<shift);
+            } else {
+                let current=self.pmu_read_reg(offset);
+                let mask=!(0xFFu32<<shift);
+                self.pmu_write_reg(offset,(current&mask)|((value as u32)<<shift));
+            }
             return true;
         }
         if (0x4000_4000..0x4000_5000).contains(&address) {
