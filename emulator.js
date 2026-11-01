@@ -125,7 +125,9 @@
     const busTraceText = [];
     for (let i = Math.max(0, busTrace.length - 96); i + 2 < busTrace.length; i += 3) {
       const address = Number(busTrace[i + 1]) >>> 0;
-      const label = address === 0x45000100 ? ' [SYS1 PCLK_EN?]' :
+      const label = address === 0x4002F000 ? ' [XIP_CTRL]' :
+        address === 0x4002F004 ? ' [XIP_BASE]' :
+        address === 0x45000100 ? ' [SYS1 PCLK_EN?]' :
         address === 0x45000108 ? ' [SYS1 PERI_CLKCTL?]' :
         address === 0x4500010C ? ' [SYS1 PCLK_RST?]' :
         (address >= 0x45000100 && address < 0x45000200) ? ' [SYS1]' :
