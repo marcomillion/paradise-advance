@@ -637,6 +637,40 @@ impl BrowserCapybara {
     pub fn pc(&self) -> u32 { self.cpu.regs.pc }
     pub fn sp(&self) -> u32 { self.cpu.regs.msp }
     pub fn cycles(&self) -> u64 { self.cpu.cycles }
+    pub fn register(&self, index: u32) -> u32 {
+        if index < 16 { self.cpu.regs.get_reg(index as u8) } else { 0 }
+    }
+    pub fn execution_snapshot(&self) -> Vec<u32> {
+        let mut out = Vec::with_capacity(19);
+        out.extend_from_slice(&self.cpu.regs.r);
+        out.push(self.cpu.regs.get_sp());
+        out.push(self.cpu.regs.lr);
+        out.push(self.cpu.regs.pc);
+        out.push(0);
+        out.push(0);
+        out.push(self.cpu.regs.xpsr);
+        out
+    }
+    pub fn execution_window(&self) -> Vec<u32> {
+        vec![self.cpu.regs.pc, 0]
+    }
+    pub fn set_button(&mut self, index: u32, pressed: bool) -> Result<(), JsValue> {
+        let pin = match index {
+            0 => 9,  // A: P0.9
+            1 => 11, // B: P0.11
+            2 => 10, // C: P0.10
+            3 => 8,  // dial push: P0.8
+            _ => return Err(JsValue::from_str("Button index must be 0..3 (A, B, C, or dial).")),
+        };
+        if pressed { self.peripherals.port0.appuyer(pin); }
+        else { self.peripherals.port0.relacher(pin); }
+        Ok(())
+    }
+    pub fn rotate_dial(&mut self, delta: i32) {
+        self.peripherals.port2.appuyer(0);
+        let _ = delta;
+        self.peripherals.port2.relacher(0);
+    }
 
     pub fn display_width(&self) -> u32 { self.peripherals.display.width as u32 }
     pub fn display_height(&self) -> u32 { self.peripherals.display.height as u32 }
