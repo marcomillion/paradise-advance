@@ -627,6 +627,7 @@ impl ThumbCpu {
         else { self.itstate=(self.itstate&0xE0)|((self.itstate<<1)&0x1F); }
     }
     fn step_inner(&mut self,m:&mut MemoryStorage)->Result<(),CpuFault> {
+        m.set_current_pc(self.r[15]);
         if self.in_irq && self.r[15]>=0xFFFF_FFF0 { self.exception_return(m); return Ok(()); }
         if self.halted { return Err(CpuFault::Halted); }
         if self.sleeping { return Ok(()); }
