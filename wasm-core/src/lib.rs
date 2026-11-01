@@ -445,6 +445,58 @@ mod browser_integration_tests {
     }
 
     #[test]
+    fn synthetic_sonix_firmware_boots_and_draws_through_dma() {
+        let mut image = vec![0xFFu8; crate::memory::FLASH_SIZE];
+        image[..8].copy_from_slice(b"SONIXDEV");
+        image[8..12].copy_from_slice(&0x12u32.to_le_bytes()); // unencrypted load table
+        image[0x10..0x14].copy_from_slice(&0x6000_1000u32.to_le_bytes());
+        image[0x14..0x18].copy_from_slice(&0x1_0000u32.to_le_bytes());
+        image[0x90..0xA0].fill(0);
+        image[0x1F8..0x1FC].copy_from_slice(&0x5A5A_0033u32.to_le_bytes());
+
+        let region = 0x1000usize;
+        image[region..region + 4].copy_from_slice(
+            &(crate::memory::SRAM_BASE + crate::memory::SRAM_SIZE as u32 - 16).to_le_bytes()
+        );
+        image[region + 4..region + 8].copy_from_slice(&0x0000_0101u32.to_le_bytes());
+
+        // Reset handler loads DMA base/source/destination/count from a literal
+        // pool, then executes four real STR.W MMIO writes. No test code writes
+        // the DMA registers on the firmware's behalf.
+        image[region + 0x100..region + 0x11A].copy_from_slice(&[
+            0x07, 0x49, // LDR r1, [PC, #28] -> 0x4000F100
+            0x08, 0x4A, // LDR r2, [PC, #32] -> source 0x200
+            0x08, 0x4B, // LDR r3, [PC, #32] -> 0x4000E01C
+            0x09, 0x4C, // LDR r4, [PC, #36] -> two halfwords
+            0x01, 0x25, // MOVS r5, #1
+            0xC1, 0xF8, 0x08, 0x20, // STR.W r2, [r1, #8] SOURCE
+            0xC1, 0xF8, 0x0C, 0x30, // STR.W r3, [r1, #12] DESTINATION
+            0xC1, 0xF8, 0x14, 0x40, // STR.W r4, [r1, #20] COUNT
+            0xC1, 0xF8, 0x00, 0x50, // STR.W r5, [r1, #0] START
+        ]);
+        image[region + 0x120..region + 0x130].copy_from_slice(&[
+            0x00, 0xF1, 0x00, 0x40, // DMA channel 0 base
+            0x00, 0x02, 0x00, 0x00, // source in PRAM
+            0x1C, 0xE0, 0x00, 0x40, // SPI DATA destination
+            0x02, 0x00, 0x00, 0x00, // two RGB565 pixels
+        ]);
+        image[region + 0x200..region + 0x204].copy_from_slice(&[
+            0xE0, 0x07, 0x1F, 0x00, // green, blue
+        ]);
+
+        let mut cpu = BrowserCpu::new();
+        cpu.load_sonix_firmware(&image, 0).expect("synthetic Sonix firmware loads");
+        assert_eq!(cpu.register(15).unwrap(), 0x100);
+        assert_eq!(cpu.run_steps(9), 9);
+        assert!(!cpu.halted(), "reset handler should complete without a CPU fault");
+        let frame = cpu.display_rgba_framebuffer();
+        assert_eq!(&frame[0..4], &[0, 255, 0, 255]);
+        assert_eq!(&frame[4..8], &[0, 0, 255, 255]);
+        assert_eq!(cpu.display_frames_received(), 1);
+        assert_eq!(cpu.dma_diagnostics()[3], 1);
+    }
+
+    #[test]
     fn rejects_sonix_image_with_reset_vector_outside_user_code() {
         let mut image = vec![0xFFu8; crate::memory::FLASH_SIZE];
         image[..8].copy_from_slice(b"SONIXDEV");
