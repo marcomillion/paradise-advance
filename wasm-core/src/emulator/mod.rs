@@ -8,6 +8,9 @@ pub mod mmu;
 pub mod peripherals;
 pub mod sonix;
 
+/// Flash page size shared with Capybara save-state bookkeeping.
+pub mod etat { pub const PAGE_FLASH: usize = 0x1000; }
+
 pub use cpu::{Cpu, StepResult};
 pub use mmu::MemoryBus;
 pub use peripherals::Peripherals;
