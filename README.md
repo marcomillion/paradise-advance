@@ -41,7 +41,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-The Playwright suite checks sprite creation/renaming and local persistence, pixel painting and JSON export, local gallery draft management, and browser WebAssembly startup. GitHub Actions runs these checks alongside the Rust unit tests and WebAssembly build.
+The Playwright suite checks sprite creation, renaming and persistence; pixel painting, fill, undo/redo and resizing; PNG/JSON imports and exports; local gallery drafts; workspace backup recovery and selected animation-frame persistence; animation import and preview; device controls; and browser WebAssembly startup. GitHub Actions runs these checks alongside the Rust unit tests and WebAssembly build.
 
 The WebAssembly worker and generated package are stored in `wasm-core/browser-worker.js` and `wasm-core/pkg/`. To rebuild the package after changing Rust code:
 
