@@ -41,6 +41,44 @@ test('sprite editor can paint a pixel and export a project JSON', async ({ page 
   expect(download.suggestedFilename()).toMatch(/\.json$/);
 });
 
+test('fill tool, undo/redo, and resize preserve editable pixels', async ({ page }) => {
+  await page.locator('#newSpriteBtn').click();
+  await page.locator('#colorPicker').evaluate(el => {
+    el.value = '#336699';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await page.locator('[data-tool="fill"]').click();
+  await page.locator('#spriteCanvas').click({ position: { x: 5, y: 5 } });
+
+  await page.waitForFunction(() => {
+    const saved = JSON.parse(localStorage.getItem('paradiseModStudio.workspace.v1') || '{}');
+    return saved.sprites?.[0]?.pixels?.every(pixel => pixel === '#336699');
+  });
+
+  await page.locator('#undoBtn').click();
+  await expect.poll(() => page.evaluate(() => {
+    const saved = JSON.parse(localStorage.getItem('paradiseModStudio.workspace.v1') || '{}');
+    return saved.sprites?.[0]?.pixels?.every(pixel => pixel === null);
+  })).toBe(true);
+
+  await page.locator('#redoBtn').click();
+  await expect.poll(() => page.evaluate(() => {
+    const saved = JSON.parse(localStorage.getItem('paradiseModStudio.workspace.v1') || '{}');
+    return saved.sprites?.[0]?.pixels?.every(pixel => pixel === '#336699');
+  })).toBe(true);
+
+  await page.locator('#spriteWidth').fill('16');
+  await page.locator('#spriteHeight').fill('12');
+  await page.locator('#resizeBtn').click();
+  await expect.poll(() => page.evaluate(() => {
+    const saved = JSON.parse(localStorage.getItem('paradiseModStudio.workspace.v1') || '{}');
+    return saved.sprites?.[0]?.width === 16 &&
+      saved.sprites?.[0]?.height === 12 &&
+      saved.sprites?.[0]?.pixels?.length === 192 &&
+      saved.sprites[0].pixels.every(pixel => pixel === '#336699');
+  })).toBe(true);
+});
+
 test('emulator firmware button opens the local file picker', async ({ page }) => {
   await page.locator('[data-view="emulator"]').click();
   const chooserPromise = page.waitForEvent('filechooser');
