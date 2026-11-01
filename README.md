@@ -64,4 +64,4 @@ Firmware files and entered device keys are processed in the browser; this app do
 
 ## Reference implementation and licensing
 
-The emulator port references code from [Capybara](https://github.com/infinition/capybara), which is licensed under GPL-3.0-only. See the notices and source files under `wasm-core/` for implementation details.
+The browser emulator adapts selected core components from [Capybara](https://github.com/infinition/capybara), an independent Sonix SNC73410 emulator licensed under GPL-3.0-only. Paradise Advance is also distributed under GPL-3.0-only. The browser implementation is a separate WebAssembly port; it is not yet feature-equivalent to Capybara's complete desktop emulator, and retail-firmware boot is not verified. See `THIRD_PARTY_NOTICES.md` for attribution and `LICENSE` for the full licence.
