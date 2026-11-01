@@ -503,7 +503,12 @@ function renderAnimationStrip() {
 }
 function loadAnimationFrame(index) {
  const frame=animationState.frames[index];if(!frame)return;let s=active();
- if(!s){createSprite(frame.name,frame.width,frame.height,[...frame.pixels],[...frame.palette]);return}
+ if(!s){
+  createSprite(frame.name,frame.width,frame.height,[...frame.pixels],[...frame.palette]);
+  $('animationPreviewLabel').textContent='Frame '+(index+1)+' of '+animationState.frames.length;
+  drawAnimationFrame(frame,$('animationPreviewCanvas'));
+  return;
+ }
  snap();s.name=frame.name||'Animation Frame '+(index+1);s.width=frame.width;s.height=frame.height;s.pixels=[...frame.pixels];s.palette=[...frame.palette];
  $('spriteName').value=s.name;$('spriteWidth').value=s.width;$('spriteHeight').value=s.height;renderAll();$('animationPreviewLabel').textContent='Frame '+(index+1)+' of '+animationState.frames.length;drawAnimationFrame(frame,$('animationPreviewCanvas'));
 }
