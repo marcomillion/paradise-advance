@@ -783,9 +783,9 @@ mod tests {
         assert_eq!(m.peripheral_last_read_address,0x4000_E000);
         assert_eq!(m.peripheral_last_read_value,0x12345678);
         let trace=m.peripheral_trace();
-        assert_eq!(trace.len(),15);
-        assert_eq!(&trace[0..3],&[1,0x4000_E000,0x78]);
-        assert_eq!(&trace[12..15],&[0,0x4000_E000,0x12345678]);
+        assert_eq!(trace.len(),20);
+        assert_eq!(&trace[0..4],&[1,0,0x4000_E000,0x78]);
+        assert_eq!(&trace[16..20],&[0,0,0x4000_E000,0x12345678]);
     }
     #[test]
     fn unknown_snc_peripheral_reads_are_visible_in_trace() {
@@ -795,7 +795,7 @@ mod tests {
         assert_eq!(m.peripheral_read_count,1);
         assert_eq!(m.peripheral_last_read_address,0x4500_1000);
         assert_eq!(m.peripheral_last_read_value,0);
-        assert_eq!(m.peripheral_trace(),vec![0,0x4500_1000,0]);
+        assert_eq!(m.peripheral_trace(),vec![0,0,0x4500_1000,0]);
     }
 
     #[test]
@@ -830,9 +830,9 @@ mod tests {
             let _=m.write_u8(0x4500_0000+i,i as u8);
         }
         let trace=m.peripheral_trace();
-        assert_eq!(trace.len(),96);
-        assert_eq!(&trace[0..3],&[1,0x4500_0001,1]);
-        assert_eq!(&trace[93..96],&[1,0x4500_0020,32]);
+        assert_eq!(trace.len(),128);
+        assert_eq!(&trace[0..4],&[1,0,0x4500_0001,1]);
+        assert_eq!(&trace[124..128],&[1,0,0x4500_0020,32]);
     }
 
     #[test]
