@@ -121,7 +121,7 @@ test('synthetic Sonix firmware boots and paints real DMA pixels onto the browser
   ], region + 0x120);
   firmware.set([0xE0, 0x07, 0x1F, 0x00], region + 0x200);
 
-  await page.locator('#firmwareInput').setInputFiles({
+  await page.locator('#emulatorFirmwareInput').setInputFiles({
     name: 'synthetic-sonix-firmware.bin',
     mimeType: 'application/octet-stream',
     buffer: firmware
