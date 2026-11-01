@@ -263,15 +263,17 @@ impl Default for BrowserCpu {fn default()->Self{Self::new()}}
 mod browser_integration_tests {
     use super::*;
     #[test]
-    fn cpu_framebuffer_snapshot_reads_sram_pixels() {
+    fn panel_does_not_treat_raw_sram_as_a_display_frame() {
         let mut cpu = BrowserCpu::new();
-        // The emulated LCD's configured framebuffer begins at SRAM + 0x8000.
+        // SRAM is only a candidate source buffer. The panel changes when the
+        // firmware performs the observed DMA transfer to the SPI data register.
         cpu.memory.sram[0x8000..0x8002].copy_from_slice(&0x07E0u16.to_le_bytes());
         cpu.memory.pram[0..2].copy_from_slice(&0xBF00u16.to_le_bytes()); // NOP
         cpu.cpu.r[15] = 0;
         cpu.step().unwrap();
         let frame = cpu.display_rgba_framebuffer();
-        assert_eq!(&frame[0..4], &[0, 255, 0, 255]);
+        assert_eq!(&frame[0..4], &[0, 0, 0, 255]);
+        assert_eq!(cpu.display_frames_received(), 0);
         assert_eq!(cpu.instructions(), 1);
     }
 
