@@ -1,5 +1,6 @@
-//! Portable browser-facing components for the real Paradise emulator.
-//! Firmware inspection is real; CPU execution and decryption are not yet integrated.
+//! Browser-facing components for the Paradise firmware emulator.
+//! BrowserCpu is the earlier experimental core; BrowserCapybara wraps the
+//! ported Capybara SNC73410 CPU, bus, peripheral, and Sonix firmware loader.
 
 mod aes;
 mod cpu;
