@@ -628,8 +628,9 @@ mod tests {
         assert_eq!(memory.read_u32(0x4000_1008), 0xA5);
         assert_eq!(memory.read_u32(0x4000_100C), 0x1234);
 
+        memory.pmu_registers[1] = 0xF0;
         assert!(memory.write_u32(0x4000_1004, 0xC0));
-        assert_eq!(memory.read_u32(0x4000_1004), 0);
+        assert_eq!(memory.read_u32(0x4000_1004), 0x30);
     }
 
     #[test]
