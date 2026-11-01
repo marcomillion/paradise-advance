@@ -32,6 +32,10 @@ pub fn region_for(address: u32) -> RegionKind {
 pub struct MemoryStorage {
     pub pram: Vec<u8>, pub boot_rom: Vec<u8>, pub sram: Vec<u8>,
     pub mailbox: Vec<u8>, pub flash: Vec<u8>,
+    // SNC73410 SN_SYS0 register bank at 0x45000000, including FEUSE key words.
+    snsys_registers: [u32; 1024],
+    device_key: u32,
+    snsys_pll_locked: bool,
     pub gpio_buttons: [bool; 4], pub dial_counter: i32,
     pub gpio_port_data: [u32; 3], pub gpio_port_direction: [u32; 3], pub gpio_port_mode: [u32; 3],
     pub gpio_port_irq_enable: [u32; 3], pub gpio_port_irq_status: [u32; 3],
@@ -54,6 +58,7 @@ impl MemoryStorage {
         boot_rom[0x40..0x46].copy_from_slice(&[0x00,0xBF,0x01,0x20,0xFE,0xE7]);
         Self { pram:vec![0;PRAM_SIZE], boot_rom, sram:vec![0;SRAM_SIZE],
             mailbox:vec![0;MAILBOX_SIZE], flash:vec![0xFF;FLASH_SIZE],
+            snsys_registers:[0;1024], device_key:0, snsys_pll_locked:false,
             gpio_buttons:[false;4], dial_counter:0,
             gpio_port_data:[0;3], gpio_port_direction:[0;3], gpio_port_mode:[0;3],
             gpio_port_irq_enable:[0;3], gpio_port_irq_status:[0;3], gpio_port_cycles:0, gpio_te_high:true,
@@ -65,6 +70,37 @@ impl MemoryStorage {
             peripheral_read_count:0, peripheral_last_read_address:0, peripheral_last_read_value:0, peripheral_trace:Vec::new(), nvic_iser:[0;2],
             systick_ctrl:0, systick_reload:0, systick_current:0, systick_pending:false }
     }
+    /// Set the key read by retail firmware from the write-protected FEUSE registers.
+    pub fn set_device_key(&mut self, key: u32) { self.device_key = key; }
+
+    fn snsys_read_reg(&self, offset: u32) -> u32 {
+        match offset {
+            // The PLL unlock sequence causes the lock bits to assert.
+            0x08 => if self.snsys_pll_locked { 0x50 } else { 0 },
+            // Hardware echoes the selected clock source into status bits 6:4.
+            0x0C => {
+                let value = self.snsys_registers[3];
+                (value & !0x70) | ((value & 0x07) << 4)
+            }
+            // FEUSE0..3 are read-only. FEUSE2 carries the upper key half;
+            // FEUSE3 exposes the full 32-bit device key on this variant.
+            0x30 => 0,
+            0x34 => 0,
+            0x38 => self.device_key & 0xFFFF_0000,
+            0x3C => self.device_key,
+            _ => self.snsys_registers[(offset & 0x0FFF) as usize / 4],
+        }
+    }
+
+    fn snsys_write_reg(&mut self, offset: u32, value: u32) {
+        if offset == 0x04 && value == 0xA55A_0000 {
+            self.snsys_pll_locked = true;
+        }
+        // Fuse words are physically write-protected.
+        if (0x30..=0x3C).contains(&offset) { return; }
+        self.snsys_registers[(offset & 0x0FFF) as usize / 4] = value;
+    }
+
     pub fn load_pram(&mut self, bytes: &[u8]) {
         self.pram.fill(0);
         let len = bytes.len().min(self.pram.len());
@@ -204,6 +240,10 @@ impl MemoryStorage {
         }
     }
     pub fn read_u8(&self, address: u32) -> u8 {
+        if (0x4500_0000..0x4500_1000).contains(&address) {
+            let value=self.snsys_read_reg((address-0x4500_0000)&!3);
+            return ((value >> ((address&3)*8)) & 0xFF) as u8;
+        }
         if (0x4000_E000..=0x4000_E01F).contains(&address) {
             let reg=self.spi_read_reg((address-0x4000_E000)&!3);
             return ((reg>>((address&3)*8))&0xFF) as u8;
@@ -275,6 +315,9 @@ impl MemoryStorage {
         value
     }
     pub fn read_u32(&self, address: u32) -> u32 {
+        if (0x4500_0000..0x4500_1000).contains(&address) {
+            return self.snsys_read_reg((address-0x4500_0000)&!3);
+        }
         if (0x4000_E000..=0x4000_E01F).contains(&address) { return self.spi_read_reg((address-0x4000_E000)&!3); }
         if (0x2200_0000..=0x23FF_FFFF).contains(&address) || (0x4200_0000..=0x43FF_FFFF).contains(&address) {
             if let Some((target,bit))=Self::bitband_target(address) { return ((self.read_u8(target)>>bit)&1) as u32; }
@@ -283,6 +326,15 @@ impl MemoryStorage {
             self.read_u8(address.wrapping_add(2)),self.read_u8(address.wrapping_add(3))])
     }
     pub fn write_u32(&mut self,address:u32,value:u32)->bool {
+        if (0x4500_0000..0x4500_1000).contains(&address) {
+            if address&3!=0 { return false; }
+            self.peripheral_write_count=self.peripheral_write_count.wrapping_add(4);
+            self.peripheral_last_write_address=address.wrapping_add(3);
+            self.peripheral_last_write_value=(value>>24)&0xFF;
+            for i in 0..4 { self.trace_peripheral(1,address.wrapping_add(i),(value>>(i*8))&0xFF); }
+            self.snsys_write_reg(address-0x4500_0000,value);
+            return true;
+        }
         if (0x4000_E000..=0x4000_E01F).contains(&address) {
             if address&3!=0 { return false; }
             // Keep the broad bus counters consistent for aligned word writes,
@@ -311,6 +363,14 @@ impl MemoryStorage {
             self.peripheral_last_write_address=address;
             self.peripheral_last_write_value=value as u32;
             self.trace_peripheral(1,address,value as u32);
+        }
+        if (0x4500_0000..0x4500_1000).contains(&address) {
+            let offset=(address-0x4500_0000)&!3;
+            let shift=(address&3)*8;
+            let current=self.snsys_read_reg(offset);
+            let mask=!(0xFFu32<<shift);
+            self.snsys_write_reg(offset,(current&mask)|((value as u32)<<shift));
+            return true;
         }
         if (0x4000_E000..=0x4000_E01F).contains(&address) {
             let shift=(address&3)*8;let offset=(address-0x4000_E000)&!3;
@@ -514,14 +574,39 @@ mod tests {
     #[test]
     fn unknown_snc_peripheral_reads_are_visible_in_trace() {
         let mut m=MemoryStorage::new();
-        // This firmware address is outside the currently modelled peripheral blocks.
-        // Keep the observed open-bus value explicit instead of inventing a register model.
-        assert_eq!(m.read_cpu_u32(0x4500_0000),0);
+        // This address is outside the modeled SN_SYS0 page and remains open bus.
+        assert_eq!(m.read_cpu_u32(0x4500_1000),0);
         assert_eq!(m.peripheral_read_count,1);
-        assert_eq!(m.peripheral_last_read_address,0x4500_0000);
+        assert_eq!(m.peripheral_last_read_address,0x4500_1000);
         assert_eq!(m.peripheral_last_read_value,0);
-        assert_eq!(m.peripheral_trace(),vec![0,0x4500_0000,0]);
+        assert_eq!(m.peripheral_trace(),vec![0,0x4500_1000,0]);
     }
+
+    #[test]
+    fn snsys0_register_bank_retains_control_values_and_models_pll_status() {
+        let mut m=MemoryStorage::new();
+        assert_eq!(m.read_u32(0x4500_0000),0);
+        assert!(m.write_u32(0x4500_0000,0x10));
+        assert_eq!(m.read_u32(0x4500_0000),0x10);
+        assert!(m.write_u32(0x4500_010C,0xA5A5_1234));
+        assert_eq!(m.read_u32(0x4500_010C),0xA5A5_1234);
+        assert!(m.write_u32(0x4500_000C,0x05));
+        assert_eq!(m.read_u32(0x4500_000C),0x55);
+        assert_eq!(m.read_u32(0x4500_0008),0);
+        assert!(m.write_u32(0x4500_0004,0xA55A_0000));
+        assert_eq!(m.read_u32(0x4500_0008),0x50);
+    }
+
+    #[test]
+    fn snsys0_fuse_words_expose_the_loaded_device_key_and_ignore_writes() {
+        let mut m=MemoryStorage::new();
+        m.set_device_key(0x1234_5678);
+        assert_eq!(m.read_u32(0x4500_0038),0x1234_0000);
+        assert_eq!(m.read_u32(0x4500_003C),0x1234_5678);
+        assert!(m.write_u32(0x4500_003C,0xFFFF_FFFF));
+        assert_eq!(m.read_u32(0x4500_003C),0x1234_5678);
+    }
+
     #[test]
     fn peripheral_trace_retains_only_the_latest_32_accesses() {
         let mut m=MemoryStorage::new();
