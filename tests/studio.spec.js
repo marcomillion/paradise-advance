@@ -110,7 +110,8 @@ test('synthetic Sonix firmware boots and paints real DMA pixels onto the browser
     0xC1, 0xF8, 0x08, 0x20, // STR.W r2, [r1, #8]
     0xC1, 0xF8, 0x0C, 0x30, // STR.W r3, [r1, #12]
     0xC1, 0xF8, 0x14, 0x40, // STR.W r4, [r1, #20]
-    0xC1, 0xF8, 0x00, 0x50  // STR.W r5, [r1, #0] START
+    0xC1, 0xF8, 0x00, 0x50, // STR.W r5, [r1, #0] START
+    0xFE, 0xE7              // B . (keep the synthetic firmware running)
   ], region + 0x100);
   firmware.set([
     0x00, 0xF1, 0x00, 0x40, // DMA base
@@ -129,7 +130,7 @@ test('synthetic Sonix firmware boots and paints real DMA pixels onto the browser
   await page.locator('#emulatorStartCpuBtn').click();
   await expect(page.locator('#emulatorStatusTitle')).toHaveText('CPU loaded · not yet a complete emulator');
 
-  await page.locator('#emulatorRunCount').fill('9');
+  await page.locator('#emulatorRunCount').selectOption('1000');
   await page.locator('#emulatorRunBtn').click();
   await expect(page.locator('#deviceInputStatus')).toContainText('LCD frame received', { timeout: 15000 });
   await expect.poll(() => page.locator('#previewCanvas').evaluate(canvas => {
