@@ -923,4 +923,15 @@ mod tests {
         assert_eq!(m.read_u8(XIP_BASE),0x12);
         assert!(m.load_flash(&[1,2,3]).is_err());
     }
+    #[test]
+    fn peripheral_trace_records_the_thumb_pc_for_reads_and_writes() {
+        let mut memory = MemoryStorage::new();
+        memory.set_current_pc(0x0000_B944);
+        assert!(memory.write_u8(0x4000_1000, 0x55));
+        assert_eq!(memory.read_cpu_u8(0x4000_1000), 0x55);
+        let trace = memory.peripheral_trace();
+        assert_eq!(&trace[0..4], &[1, 0x0000_B944, 0x4000_1000, 0x55]);
+        assert_eq!(&trace[4..8], &[0, 0x0000_B944, 0x4000_1000, 0x55]);
+    }
+
 }
