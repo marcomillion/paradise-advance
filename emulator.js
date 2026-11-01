@@ -223,13 +223,24 @@
       await request('create-cpu');
       const result = await request('load-firmware', { bytes: firmwareBytes, deviceKey: key });
       cpuLoaded = true;
+      // A loaded reset vector is not a boot: execute an initial batch so the
+      // preview actually attempts firmware startup and reports where it stops.
+      const boot = await request('run', { count: 100000 });
       await refreshFirmwareFrame();
-      $('emulatorStepBtn').disabled = false;
-      $('emulatorRunBtn').disabled = false;
-      $('emulatorRunToPcBtn').disabled = false;
-      setStatus('CPU loaded · not yet a complete emulator',
-        'The firmware user-code region was decrypted and copied into PRAM. Initial SP ' + formatHex(result.initialSp) +
-        ', reset PC ' + formatHex(result.initialPc) + '. The Thumb interpreter and hardware models are partial. The panel now displays frames delivered by the modeled DMA-to-SPI data path; it stays on the waiting screen until firmware sends its first frame. Retail firmware boot and the complete chip MMIO map are not yet verified. Step/run may stop on an unsupported instruction.');
+      showCpuRegisters(boot.snapshot);
+      showCodeWindow(boot.codeWindow, boot.pc);
+      $('emulatorStepBtn').disabled = Boolean(boot.halted);
+      $('emulatorRunBtn').disabled = Boolean(boot.halted);
+      $('emulatorRunToPcBtn').disabled = Boolean(boot.halted);
+      const bootHeading = boot.halted
+        ? 'CPU halted during initial boot attempt'
+        : boot.sleeping ? 'CPU entered sleep while booting' : 'Initial boot batch executed';
+      setStatus(bootHeading,
+        'Initial SP ' + formatHex(result.initialSp) + ' · reset PC ' + formatHex(result.initialPc) +
+        ' · executed ' + Number(boot.executed).toLocaleString() + ' instructions · current PC ' + formatHex(boot.pc) +
+        ' · halted: ' + Boolean(boot.halted) + ' · sleeping: ' + Boolean(boot.sleeping) +
+        (boot.halted ? ' · fault: ' + boot.fault : '') +
+        '. This is a diagnostic boot attempt, not proof of a complete retail boot. The display still requires a real modeled LCD transfer.');
     } catch (error) {
       cpuLoaded = false;
       setStatus('Firmware did not start', error.message || String(error));
