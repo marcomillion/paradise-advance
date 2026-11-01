@@ -667,9 +667,19 @@ impl BrowserCapybara {
         Ok(())
     }
     pub fn rotate_dial(&mut self, delta: i32) {
-        self.peripherals.port2.appuyer(0);
-        let _ = delta;
-        self.peripherals.port2.relacher(0);
+        // The physical encoder is wired to P2.0/P2.1. Advance a quadrature
+        // sequence so the same GPIO edge logic used by firmware sees rotation.
+        let forward = [(true, false), (true, true), (false, true), (false, false)];
+        let reverse = [(false, true), (true, true), (true, false), (false, false)];
+        let sequence = if delta >= 0 { &forward[..] } else { &reverse[..] };
+        for _ in 0..delta.unsigned_abs().min(64) {
+            for &(p0_low, p1_low) in sequence {
+                if p0_low { self.peripherals.port2.appuyer(0); }
+                else { self.peripherals.port2.relacher(0); }
+                if p1_low { self.peripherals.port2.appuyer(1); }
+                else { self.peripherals.port2.relacher(1); }
+            }
+        }
     }
 
     pub fn display_width(&self) -> u32 { self.peripherals.display.width as u32 }
