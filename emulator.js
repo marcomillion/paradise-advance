@@ -3,7 +3,7 @@
   const title = $('emulatorStatusTitle');
   const status = $('emulatorStatusText');
   const inputStatus = $('deviceInputStatus');
-  const fileInput = $('firmwareInput');
+  const fileInput = $('emulatorFirmwareInput');
   let worker = null;
   let initPromise = null;
   let requestId = 0;
