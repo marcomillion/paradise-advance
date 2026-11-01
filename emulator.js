@@ -66,7 +66,7 @@
     if (initPromise) return initPromise;
     initPromise = new Promise((resolve, reject) => {
       try {
-        worker = new Worker('wasm-core/browser-worker.js?v=single-step-snapshot-20261101', { type: 'module' });
+        worker = new Worker('wasm-core/browser-worker.js?v=dma-panel-frame-20261101', { type: 'module' });
       } catch (error) {
         worker = null; initPromise = null; reject(error); return;
       }
@@ -116,7 +116,15 @@
     const pixels = frame.rgba instanceof Uint8Array ? frame.rgba : new Uint8Array(frame.rgba);
     ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels), frame.width, frame.height), 0, 0);
     const empty = $('previewEmpty');
-    if (empty) empty.style.display = 'none';
+    const receivedFrames = Number(frame.framesReceived || 0);
+    if (empty) {
+      if (receivedFrames > 0) {
+        empty.style.display = 'none';
+      } else {
+        empty.innerHTML = 'WAITING FOR FIRMWARE<br>LCD DMA FRAME';
+        empty.style.display = '';
+      }
+    }
     canvas.style.imageRendering = 'pixelated';
     const scale = Number($('previewScale')?.value || 3);
     canvas.style.width = (frame.width * scale) + 'px';
@@ -136,7 +144,7 @@
     }
     const tracePanel = $('peripheralTraceStatus');
     if (tracePanel) tracePanel.textContent = busTraceText.length ? busTraceText.join('\n') : 'No peripheral accesses captured in this batch.';
-    if (inputStatus) inputStatus.textContent = 'LCD diagnostics · DMA frames: ' + Number(frame.framesReceived || 0).toLocaleString() + ' · non-black pixels: ' + Number(frame.nonzeroPixels || 0).toLocaleString() + ' / ' + (frame.width * frame.height).toLocaleString() + ' · pixel checksum: 0x' + (Number(frame.pixelChecksum || 0) >>> 0).toString(16).toUpperCase().padStart(8, '0') + ' · DMA writes: ' + Number(frame.dmaDiagnostics?.[0] || 0).toLocaleString() + ' · last DMA MMIO: ' + formatHex(frame.dmaDiagnostics?.[1] || 0) + ' = ' + formatHex(frame.dmaDiagnostics?.[2] || 0) + ' · transfer attempts: ' + Number(frame.dmaDiagnostics?.[3] || 0).toLocaleString() + ' · last transfer: src ' + formatHex(frame.dmaDiagnostics?.[4] || 0) + ' → dst ' + formatHex(frame.dmaDiagnostics?.[5] || 0) + ' · units ' + Number(frame.dmaDiagnostics?.[6] || 0).toLocaleString() + ' · all peripheral writes: ' + Number(frame.peripheralDiagnostics?.[0] || 0).toLocaleString() + ' · last peripheral MMIO: ' + formatHex(frame.peripheralDiagnostics?.[1] || 0) + ' = ' + formatHex(frame.peripheralDiagnostics?.[2] || 0) + ' · SPI TX words: ' + Number(frame.peripheralDiagnostics?.[3] || 0).toLocaleString() + ' · peripheral reads: ' + Number(frame.peripheralDiagnostics?.[5] || 0).toLocaleString() + ' · last peripheral read: ' + formatHex(frame.peripheralDiagnostics?.[6] || 0) + ' = ' + formatHex(frame.peripheralDiagnostics?.[7] || 0);
+    if (inputStatus) inputStatus.textContent = (receivedFrames > 0 ? 'LCD frame received · DMA frames: ' : 'Waiting for firmware LCD DMA · DMA frames: ') + receivedFrames.toLocaleString() + ' · non-black pixels: ' + Number(frame.nonzeroPixels || 0).toLocaleString() + ' / ' + (frame.width * frame.height).toLocaleString() + ' · pixel checksum: 0x' + (Number(frame.pixelChecksum || 0) >>> 0).toString(16).toUpperCase().padStart(8, '0') + ' · DMA writes: ' + Number(frame.dmaDiagnostics?.[0] || 0).toLocaleString() + ' · last DMA MMIO: ' + formatHex(frame.dmaDiagnostics?.[1] || 0) + ' = ' + formatHex(frame.dmaDiagnostics?.[2] || 0) + ' · transfer attempts: ' + Number(frame.dmaDiagnostics?.[3] || 0).toLocaleString() + ' · last transfer: src ' + formatHex(frame.dmaDiagnostics?.[4] || 0) + ' → dst ' + formatHex(frame.dmaDiagnostics?.[5] || 0) + ' · units ' + Number(frame.dmaDiagnostics?.[6] || 0).toLocaleString() + ' · all peripheral writes: ' + Number(frame.peripheralDiagnostics?.[0] || 0).toLocaleString() + ' · last peripheral MMIO: ' + formatHex(frame.peripheralDiagnostics?.[1] || 0) + ' = ' + formatHex(frame.peripheralDiagnostics?.[2] || 0) + ' · SPI TX words: ' + Number(frame.peripheralDiagnostics?.[3] || 0).toLocaleString() + ' · peripheral reads: ' + Number(frame.peripheralDiagnostics?.[5] || 0).toLocaleString() + ' · last peripheral read: ' + formatHex(frame.peripheralDiagnostics?.[6] || 0) + ' = ' + formatHex(frame.peripheralDiagnostics?.[7] || 0);
   }
   window.paradiseBrowserPetDraw = () => { refreshFirmwareFrame().catch(() => {}); };
   function formatHex(value) {
@@ -222,7 +230,7 @@
       $('emulatorRunToPcBtn').disabled = false;
       setStatus('CPU loaded · not yet a complete emulator',
         'The firmware user-code region was decrypted and copied into PRAM. Initial SP ' + formatHex(result.initialSp) +
-        ', reset PC ' + formatHex(result.initialPc) + '. The Thumb interpreter and hardware models are partial: GPIO, SysTick, SPI, DMA, and LCD signaling have initial models, but the retail chip’s full MMIO map and LCD protocol are not yet verified. Step/run may stop on an unsupported instruction.');
+        ', reset PC ' + formatHex(result.initialPc) + '. The Thumb interpreter and hardware models are partial. The panel now displays frames delivered by the modeled DMA-to-SPI data path; it stays on the waiting screen until firmware sends its first frame. Retail firmware boot and the complete chip MMIO map are not yet verified. Step/run may stop on an unsupported instruction.');
     } catch (error) {
       cpuLoaded = false;
       setStatus('Firmware did not start', error.message || String(error));
@@ -236,7 +244,7 @@
       const r = await request('step');
       await refreshFirmwareFrame();
       showCpuRegisters(r.snapshot); showCodeWindow(r.codeWindow, r.pc);
-      setStatus(r.sleeping ? 'CPU waiting for interrupt/event' : 'CPU instruction executed', 'Instructions: ' + r.instructions + ' · PC ' + formatHex(r.pc) + ' · halted: ' + r.halted + ' · sleeping: ' + Boolean(r.sleeping) + (r.halted ? ' · fault: ' + r.fault : '') + '. Display output is experimental; DMA and LCD behavior are only partially modeled.');
+      setStatus(r.sleeping ? 'CPU waiting for interrupt/event' : 'CPU instruction executed', 'Instructions: ' + r.instructions + ' · PC ' + formatHex(r.pc) + ' · halted: ' + r.halted + ' · sleeping: ' + Boolean(r.sleeping) + (r.halted ? ' · fault: ' + r.fault : '') + '. The display updates only when firmware completes a modeled DMA-to-SPI frame transfer.');
       if (r.halted) { $('emulatorStepBtn').disabled = true; $('emulatorRunBtn').disabled = true; }
     } catch (error) {
       setStatus('CPU stopped', error.message || String(error));
@@ -248,7 +256,7 @@
     try {
       const r = await request('run', { count: Number($('emulatorRunCount')?.value || 1000) });
       await refreshFirmwareFrame();
-      showCpuRegisters(r.snapshot); showCodeWindow(r.codeWindow, r.pc); setStatus('CPU run batch finished', 'Executed ' + r.executed + ' instruction(s) · total ' + r.instructions + ' · PC ' + formatHex(r.pc) + ' · halted: ' + r.halted + ' · sleeping: ' + Boolean(r.sleeping) + (r.halted ? ' · fault: ' + r.fault : '') + '. The shown image is an SRAM snapshot, not verified LCD output.');
+      showCpuRegisters(r.snapshot); showCodeWindow(r.codeWindow, r.pc); setStatus('CPU run batch finished', 'Executed ' + r.executed + ' instruction(s) · total ' + r.instructions + ' · PC ' + formatHex(r.pc) + ' · halted: ' + r.halted + ' · sleeping: ' + Boolean(r.sleeping) + (r.halted ? ' · fault: ' + r.fault : '') + '. The display updates only when firmware completes a modeled DMA-to-SPI frame transfer; no raw SRAM image is substituted.');
       if (r.halted) { $('emulatorStepBtn').disabled = true; $('emulatorRunBtn').disabled = true; }
     } catch (error) {
       setStatus('CPU stopped', error.message || String(error));
