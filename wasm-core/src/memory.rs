@@ -195,12 +195,47 @@ impl MemoryStorage {
     }
     pub fn rotate_dial(&mut self, delta: i32) { self.dial_counter = self.dial_counter.wrapping_add(delta); }
     pub fn tick_systick(&mut self) {
-        if self.systick_ctrl&1==0 { return; }
-        if self.systick_current==0 { self.systick_current=self.systick_reload; }
-        else { self.systick_current-=1; }
-        if self.systick_current==0 {
-            self.systick_ctrl|=1<<16;
-            if self.systick_ctrl&2!=0 { self.systick_pending=true; }
+        self.tick_systick_cycles(1);
+    }
+
+    /// Advance SysTick by the same approximate chip-cycle budget used by the
+    /// GPIO/LCD timing model. A CPU step currently represents 1,600 chip cycles.
+    pub fn tick_systick_cycles(&mut self, cycles: u32) {
+        if self.systick_ctrl & 1 == 0 || cycles == 0 { return; }
+
+        let reload = self.systick_reload & 0x00FF_FFFF;
+        let mut remaining = cycles as u64;
+        let mut events = 0u64;
+
+        if self.systick_current == 0 {
+            let first_period = reload as u64 + 1;
+            if remaining < first_period {
+                self.systick_current = reload - (remaining as u32 - 1);
+                return;
+            }
+            remaining -= first_period;
+            events = 1;
+        } else {
+            let until_zero = self.systick_current as u64;
+            if remaining < until_zero {
+                self.systick_current -= remaining as u32;
+                return;
+            }
+            remaining -= until_zero;
+            self.systick_current = 0;
+            events = 1;
+        }
+
+        let period = reload as u64 + 1;
+        events += remaining / period;
+        let leftover = remaining % period;
+        if leftover != 0 {
+            self.systick_current = reload - (leftover as u32 - 1);
+        }
+
+        if events != 0 {
+            self.systick_ctrl |= 1 << 16;
+            if self.systick_ctrl & 2 != 0 { self.systick_pending = true; }
         }
     }
     pub fn dma_irq_enabled(&self) -> bool { self.nvic_iser[1] & (1 << (58-32)) != 0 }
@@ -662,6 +697,26 @@ mod tests {
         assert_eq!(m.panel_frame,Some(vec![0x07E0,0x001F]));
         assert_eq!(m.dma_registers[0x100/4]&1,0);
     }
+    #[test]
+    fn systick_cycle_advance_matches_individual_timer_ticks() {
+        for reload in [0u32, 1, 2, 97, 95_999] {
+            for current in [0u32, 1, 2, 97] {
+                let mut fast = MemoryStorage::new();
+                let mut slow = MemoryStorage::new();
+                for memory in [&mut fast, &mut slow] {
+                    memory.systick_ctrl = 3;
+                    memory.systick_reload = reload;
+                    memory.systick_current = current;
+                }
+                fast.tick_systick_cycles(1_600);
+                for _ in 0..1_600 { slow.tick_systick(); }
+                assert_eq!(fast.systick_current, slow.systick_current, "reload={reload}, current={current}");
+                assert_eq!(fast.systick_ctrl & (1 << 16), slow.systick_ctrl & (1 << 16));
+                assert_eq!(fast.systick_pending, slow.systick_pending);
+            }
+        }
+    }
+
     #[test]
     fn systick_counts_down_and_sets_pending_interrupt() {
         let mut m=MemoryStorage::new();
