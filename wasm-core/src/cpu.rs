@@ -653,7 +653,11 @@ impl ThumbCpu {
     }
     pub fn step(&mut self,m:&mut MemoryStorage)->Result<(),CpuFault> {
         let result=self.step_inner(m);
-        if result.is_ok() { m.tick_systick(); m.tick_gpio(); self.service_pending_interrupt(m); }
+        if result.is_ok() {
+            m.tick_systick_cycles(1_600);
+            m.tick_gpio();
+            self.service_pending_interrupt(m);
+        }
         result
     }
 }
