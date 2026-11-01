@@ -87,6 +87,59 @@ test('emulator firmware button opens the local file picker', async ({ page }) =>
   expect(chooser).toBeTruthy();
 });
 
+test('synthetic Sonix firmware boots and paints real DMA pixels onto the browser screen', async ({ page }) => {
+  await page.locator('[data-view="emulator"]').click();
+
+  const firmware = Buffer.alloc(16 * 1024 * 1024, 0xFF);
+  firmware.write('SONIXDEV', 0, 'ascii');
+  firmware.writeUInt32LE(0x12, 8); // unencrypted Sonix load table
+  firmware.writeUInt32LE(0x60001000, 0x10);
+  firmware.writeUInt32LE(0x10000, 0x14);
+  firmware.fill(0, 0x90, 0xA0);
+  firmware.writeUInt32LE(0x5A5A0033, 0x1F8);
+
+  const region = 0x1000;
+  firmware.writeUInt32LE(0x1801FFF0, region);
+  firmware.writeUInt32LE(0x00000101, region + 4);
+  firmware.set([
+    0x07, 0x49, // LDR r1, [PC, #28] -> DMA channel 0
+    0x08, 0x4A, // LDR r2, [PC, #32] -> PRAM source
+    0x08, 0x4B, // LDR r3, [PC, #32] -> SPI DATA
+    0x09, 0x4C, // LDR r4, [PC, #36] -> two halfwords
+    0x01, 0x25, // MOVS r5, #1
+    0xC1, 0xF8, 0x08, 0x20, // STR.W r2, [r1, #8]
+    0xC1, 0xF8, 0x0C, 0x30, // STR.W r3, [r1, #12]
+    0xC1, 0xF8, 0x14, 0x40, // STR.W r4, [r1, #20]
+    0xC1, 0xF8, 0x00, 0x50  // STR.W r5, [r1, #0] START
+  ], region + 0x100);
+  firmware.set([
+    0x00, 0xF1, 0x00, 0x40, // DMA base
+    0x00, 0x02, 0x00, 0x00, // source at PRAM + 0x200
+    0x1C, 0xE0, 0x00, 0x40, // SPI DATA register
+    0x02, 0x00, 0x00, 0x00  // two RGB565 pixels
+  ], region + 0x120);
+  firmware.set([0xE0, 0x07, 0x1F, 0x00], region + 0x200);
+
+  await page.locator('#firmwareInput').setInputFiles({
+    name: 'synthetic-sonix-firmware.bin',
+    mimeType: 'application/octet-stream',
+    buffer: firmware
+  });
+  await expect(page.locator('#emulatorStartCpuBtn')).toBeEnabled({ timeout: 15000 });
+  await page.locator('#emulatorStartCpuBtn').click();
+  await expect(page.locator('#emulatorStatusTitle')).toHaveText('CPU loaded · not yet a complete emulator');
+
+  await page.locator('#emulatorRunCount').fill('9');
+  await page.locator('#emulatorRunBtn').click();
+  await expect(page.locator('#deviceInputStatus')).toContainText('LCD frame received', { timeout: 15000 });
+  await expect.poll(() => page.locator('#previewCanvas').evaluate(canvas => {
+    const ctx = canvas.getContext('2d');
+    const pixels = ctx.getImageData(0, 0, 2, 1).data;
+    return Array.from(pixels);
+  })).toEqual([0, 255, 0, 255, 0, 0, 255, 255]);
+  await expect(page.locator('#previewEmpty')).toBeHidden();
+});
+
 test('keyboard activation of a device button sends the correct input pulse', async ({ page }) => {
   await page.locator('[data-view="emulator"]').click();
   await page.evaluate(() => {
