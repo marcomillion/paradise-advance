@@ -284,6 +284,9 @@ test('imported animation projects survive a browser reload', async ({ page }) =>
 
   await expect(page.locator('#animationFrameCount')).toHaveText('1 frame');
   await expect(page.locator('#animationFps')).toHaveValue('6');
+  await expect(page.locator('#animationPreviewLabel')).toHaveText('Frame 1 of 1');
+  await expect(page.locator('#animationPreviewCanvas')).toHaveAttribute('width', '2');
+  await expect(page.locator('#animationPreviewCanvas')).toHaveAttribute('height', '2');
   await page.waitForFunction(() => {
     const saved = JSON.parse(localStorage.getItem('paradiseModStudio.workspace.v1') || '{}');
     return saved.animation?.frames?.[0]?.name === 'Imported frame';
