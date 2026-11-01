@@ -1,6 +1,40 @@
 /* tslint:disable */
 /* eslint-disable */
 
+export class BrowserCapybara {
+    free(): void;
+    [Symbol.dispose](): void;
+    cycles(): bigint;
+    display_enabled(): boolean;
+    display_frames(): number;
+    display_height(): number;
+    display_nonzero_pixels(): number;
+    display_pixel_checksum(): number;
+    display_rgba(): Uint8Array;
+    display_width(): number;
+    execution_snapshot(): Uint32Array;
+    execution_window(): Uint32Array;
+    halted(): boolean;
+    /**
+     * Load and decrypt a real 16 MiB Sonix flash dump with the user's device key.
+     * Firmware bytes remain in browser memory and are never uploaded by this core.
+     */
+    load_firmware(bytes: Uint8Array | number[], device_key: number): void;
+    loaded(): boolean;
+    constructor();
+    pc(): number;
+    register(index: number): number;
+    reset(): void;
+    rotate_dial(delta: number): void;
+    /**
+     * Execute at most one million CPU steps per call to keep browser work bounded.
+     */
+    run_steps(count: number): number;
+    set_button(index: number, pressed: boolean): void;
+    sp(): number;
+    step(): boolean;
+}
+
 /**
  * Browser API for incremental Thumb execution against the portable memory model.
  * Unsupported opcodes halt and report an error; this is not yet a full SNC73410 machine.
@@ -109,10 +143,33 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly __wbg_browsercapybara_free: (a: number, b: number) => void;
     readonly __wbg_browsercpu_free: (a: number, b: number) => void;
     readonly __wbg_browserdisplay_free: (a: number, b: number) => void;
     readonly __wbg_browserfirmwareinfo_free: (a: number, b: number) => void;
     readonly __wbg_browsermemory_free: (a: number, b: number) => void;
+    readonly browsercapybara_cycles: (a: number) => bigint;
+    readonly browsercapybara_display_enabled: (a: number) => number;
+    readonly browsercapybara_display_frames: (a: number) => number;
+    readonly browsercapybara_display_height: (a: number) => number;
+    readonly browsercapybara_display_nonzero_pixels: (a: number) => number;
+    readonly browsercapybara_display_pixel_checksum: (a: number) => number;
+    readonly browsercapybara_display_rgba: (a: number) => [number, number];
+    readonly browsercapybara_display_width: (a: number) => number;
+    readonly browsercapybara_execution_snapshot: (a: number) => [number, number];
+    readonly browsercapybara_execution_window: (a: number) => [number, number];
+    readonly browsercapybara_halted: (a: number) => number;
+    readonly browsercapybara_load_firmware: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly browsercapybara_loaded: (a: number) => number;
+    readonly browsercapybara_new: () => number;
+    readonly browsercapybara_pc: (a: number) => number;
+    readonly browsercapybara_register: (a: number, b: number) => number;
+    readonly browsercapybara_reset: (a: number) => void;
+    readonly browsercapybara_rotate_dial: (a: number, b: number) => void;
+    readonly browsercapybara_run_steps: (a: number, b: number) => number;
+    readonly browsercapybara_set_button: (a: number, b: number, c: number) => [number, number];
+    readonly browsercapybara_sp: (a: number) => number;
+    readonly browsercapybara_step: (a: number) => number;
     readonly browsercpu_display_enabled: (a: number) => number;
     readonly browsercpu_display_frames_received: (a: number) => number;
     readonly browsercpu_display_height: (a: number) => number;

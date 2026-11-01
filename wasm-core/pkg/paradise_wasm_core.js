@@ -1,5 +1,187 @@
 /* @ts-self-types="./paradise_wasm_core.d.ts" */
 
+export class BrowserCapybara {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        BrowserCapybaraFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_browsercapybara_free(ptr, 0);
+    }
+    /**
+     * @returns {bigint}
+     */
+    cycles() {
+        const ret = wasm.browsercapybara_cycles(this.__wbg_ptr);
+        return BigInt.asUintN(64, ret);
+    }
+    /**
+     * @returns {boolean}
+     */
+    display_enabled() {
+        const ret = wasm.browsercapybara_display_enabled(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * @returns {number}
+     */
+    display_frames() {
+        const ret = wasm.browsercapybara_display_frames(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
+    display_height() {
+        const ret = wasm.browsercapybara_display_height(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
+    display_nonzero_pixels() {
+        const ret = wasm.browsercapybara_display_nonzero_pixels(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
+    display_pixel_checksum() {
+        const ret = wasm.browsercapybara_display_pixel_checksum(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {Uint8Array}
+     */
+    display_rgba() {
+        const ret = wasm.browsercapybara_display_rgba(this.__wbg_ptr);
+        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v1;
+    }
+    /**
+     * @returns {number}
+     */
+    display_width() {
+        const ret = wasm.browsercapybara_display_width(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {Uint32Array}
+     */
+    execution_snapshot() {
+        const ret = wasm.browsercapybara_execution_snapshot(this.__wbg_ptr);
+        var v1 = getArrayU32FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v1;
+    }
+    /**
+     * @returns {Uint32Array}
+     */
+    execution_window() {
+        const ret = wasm.browsercapybara_execution_window(this.__wbg_ptr);
+        var v1 = getArrayU32FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v1;
+    }
+    /**
+     * @returns {boolean}
+     */
+    halted() {
+        const ret = wasm.browsercapybara_halted(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * Load and decrypt a real 16 MiB Sonix flash dump with the user's device key.
+     * Firmware bytes remain in browser memory and are never uploaded by this core.
+     * @param {Uint8Array | number[]} bytes
+     * @param {number} device_key
+     */
+    load_firmware(bytes, device_key) {
+        const val2 = +device_key;
+        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.browsercapybara_load_firmware(this.__wbg_ptr, ptr0, len0, val2);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * @returns {boolean}
+     */
+    loaded() {
+        const ret = wasm.browsercapybara_loaded(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    constructor() {
+        const ret = wasm.browsercapybara_new();
+        this.__wbg_ptr = ret;
+        BrowserCapybaraFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * @returns {number}
+     */
+    pc() {
+        const ret = wasm.browsercapybara_pc(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @param {number} index
+     * @returns {number}
+     */
+    register(index) {
+        const ret = wasm.browsercapybara_register(this.__wbg_ptr, index);
+        return ret >>> 0;
+    }
+    reset() {
+        wasm.browsercapybara_reset(this.__wbg_ptr);
+    }
+    /**
+     * @param {number} delta
+     */
+    rotate_dial(delta) {
+        wasm.browsercapybara_rotate_dial(this.__wbg_ptr, delta);
+    }
+    /**
+     * Execute at most one million CPU steps per call to keep browser work bounded.
+     * @param {number} count
+     * @returns {number}
+     */
+    run_steps(count) {
+        const ret = wasm.browsercapybara_run_steps(this.__wbg_ptr, count);
+        return ret >>> 0;
+    }
+    /**
+     * @param {number} index
+     * @param {boolean} pressed
+     */
+    set_button(index, pressed) {
+        const ret = wasm.browsercapybara_set_button(this.__wbg_ptr, index, pressed);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * @returns {number}
+     */
+    sp() {
+        const ret = wasm.browsercapybara_sp(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {boolean}
+     */
+    step() {
+        const ret = wasm.browsercapybara_step(this.__wbg_ptr);
+        return ret !== 0;
+    }
+}
+if (Symbol.dispose) BrowserCapybara.prototype[Symbol.dispose] = BrowserCapybara.prototype.free;
+
 /**
  * Browser API for incremental Thumb execution against the portable memory model.
  * Unsupported opcodes halt and report an error; this is not yet a full SNC73410 machine.
@@ -542,6 +724,9 @@ function __wbg_get_imports() {
     };
 }
 
+const BrowserCapybaraFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_browsercapybara_free(ptr, 1));
 const BrowserCpuFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_browsercpu_free(ptr, 1));

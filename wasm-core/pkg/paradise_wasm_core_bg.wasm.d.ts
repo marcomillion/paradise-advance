@@ -1,10 +1,33 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
+export const __wbg_browsercapybara_free: (a: number, b: number) => void;
 export const __wbg_browsercpu_free: (a: number, b: number) => void;
 export const __wbg_browserdisplay_free: (a: number, b: number) => void;
 export const __wbg_browserfirmwareinfo_free: (a: number, b: number) => void;
 export const __wbg_browsermemory_free: (a: number, b: number) => void;
+export const browsercapybara_cycles: (a: number) => bigint;
+export const browsercapybara_display_enabled: (a: number) => number;
+export const browsercapybara_display_frames: (a: number) => number;
+export const browsercapybara_display_height: (a: number) => number;
+export const browsercapybara_display_nonzero_pixels: (a: number) => number;
+export const browsercapybara_display_pixel_checksum: (a: number) => number;
+export const browsercapybara_display_rgba: (a: number) => [number, number];
+export const browsercapybara_display_width: (a: number) => number;
+export const browsercapybara_execution_snapshot: (a: number) => [number, number];
+export const browsercapybara_execution_window: (a: number) => [number, number];
+export const browsercapybara_halted: (a: number) => number;
+export const browsercapybara_load_firmware: (a: number, b: number, c: number, d: number) => [number, number];
+export const browsercapybara_loaded: (a: number) => number;
+export const browsercapybara_new: () => number;
+export const browsercapybara_pc: (a: number) => number;
+export const browsercapybara_register: (a: number, b: number) => number;
+export const browsercapybara_reset: (a: number) => void;
+export const browsercapybara_rotate_dial: (a: number, b: number) => void;
+export const browsercapybara_run_steps: (a: number, b: number) => number;
+export const browsercapybara_set_button: (a: number, b: number, c: number) => [number, number];
+export const browsercapybara_sp: (a: number) => number;
+export const browsercapybara_step: (a: number) => number;
 export const browsercpu_display_enabled: (a: number) => number;
 export const browsercpu_display_frames_received: (a: number) => number;
 export const browsercpu_display_height: (a: number) => number;
