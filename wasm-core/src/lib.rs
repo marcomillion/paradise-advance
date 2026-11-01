@@ -246,6 +246,9 @@ fn load_sonix_firmware_inner(cpu:&mut BrowserCpu, bytes:&[u8], device_key:u32) -
     } else {
         table.user_code.address.wrapping_add(table.user_code.length)
     };
+    // The boot-info mailbox value and the hardware XIP aperture must agree:
+    // firmware reads resources at 0x10000000, which is a window into this flash base.
+    cpu.memory.set_xip_base(xip_base);
     write_mailbox_word(&mut cpu.memory,crate::memory::MAILBOX_BASE+0xF60,crate::memory::MAILBOX_BASE);
     write_mailbox_word(&mut cpu.memory,crate::memory::MAILBOX_BASE+0x818,xip_base);
 
@@ -394,6 +397,8 @@ mod browser_integration_tests {
         image[0x14..0x18].copy_from_slice(&0x1_0000u32.to_le_bytes());
         image[0x90..0xA0].fill(0); // no separate SRAM or DPD image in this fixture
         image[0x1F8..0x1FC].copy_from_slice(&0x5A5A_0033u32.to_le_bytes());
+        // The first XIP byte follows the user-code region at 0x60011000.
+        image[0x11000..0x11004].copy_from_slice(&[0xDE, 0xAD, 0xBE, 0xEF]);
 
         let region = 0x1000usize;
         image[region..region + 4].copy_from_slice(
@@ -410,6 +415,9 @@ mod browser_integration_tests {
         assert_eq!(cpu.register(15).unwrap(), 0x100);
         assert_eq!(cpu.memory.read_u32(crate::memory::MAILBOX_BASE+0xF60),crate::memory::MAILBOX_BASE);
         assert_eq!(cpu.memory.read_u32(crate::memory::MAILBOX_BASE+0x818),0x6001_1000);
+        // Retail firmware's 0x10000000 XIP reads must see the selected flash region,
+        // not the default beginning of the dump.
+        assert_eq!(cpu.memory.read_u32(0x1000_0000),0xEFBE_ADDE);
         assert_eq!(cpu.run_steps(3), 3);
         assert_eq!(cpu.instructions(), 3);
         assert!(!cpu.halted());
