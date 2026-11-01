@@ -135,11 +135,9 @@
       const address = Number(busTrace[i + 1]) >>> 0;
       const label = address === 0x4002F000 ? ' [XIP_CTRL]' :
         address === 0x4002F004 ? ' [XIP_BASE]' :
-        address === 0x45000100 ? ' [SYS1 PCLK_EN?]' :
-        address === 0x45000108 ? ' [SYS1 PERI_CLKCTL?]' :
-        address === 0x4500010C ? ' [SYS1 PCLK_RST?]' :
-        (address >= 0x45000100 && address < 0x45000200) ? ' [SYS1]' :
-        (address >= 0x45000000 && address < 0x45000100) ? ' [SYS0]' : '';
+        (address >= 0x45000000 && address < 0x45001000)
+          ? ' [SN_SYS0 + 0x' + (address - 0x45000000).toString(16).toUpperCase().padStart(3, '0') + ']'
+          : '';
       busTraceText.push((busTrace[i] === 1 ? 'W ' : 'R ') + formatHex(address) + label + ' = ' + formatHex(busTrace[i + 2]));
     }
     const tracePanel = $('peripheralTraceStatus');
