@@ -131,14 +131,15 @@
     canvas.style.height = (frame.height * scale) + 'px';
     const busTrace = Array.from(frame.peripheralTrace || []);
     const busTraceText = [];
-    for (let i = Math.max(0, busTrace.length - 96); i + 2 < busTrace.length; i += 3) {
-      const address = Number(busTrace[i + 1]) >>> 0;
+    for (let i = Math.max(0, busTrace.length - 128); i + 3 < busTrace.length; i += 4) {
+      const pc = Number(busTrace[i + 1]) >>> 0;
+      const address = Number(busTrace[i + 2]) >>> 0;
       const label = address === 0x4002F000 ? ' [XIP_CTRL]' :
         address === 0x4002F004 ? ' [XIP_BASE]' :
         (address >= 0x45000000 && address < 0x45001000)
           ? ' [SN_SYS0 + 0x' + (address - 0x45000000).toString(16).toUpperCase().padStart(3, '0') + ']'
           : '';
-      busTraceText.push((busTrace[i] === 1 ? 'W ' : 'R ') + formatHex(address) + label + ' = ' + formatHex(busTrace[i + 2]));
+      busTraceText.push((busTrace[i] === 1 ? 'W ' : 'R ') + formatHex(address) + label + ' = ' + formatHex(busTrace[i + 3]) + '  (PC ' + formatHex(pc) + ')');
     }
     const tracePanel = $('peripheralTraceStatus');
     if (tracePanel) tracePanel.textContent = busTraceText.length ? busTraceText.join('\n') : 'No peripheral accesses captured in this batch.';
