@@ -389,6 +389,21 @@ mod browser_integration_tests {
     }
 
     #[test]
+    fn observed_early_firmware_sequence_can_read_modify_write_sn_sys0() {
+        let mut cpu=BrowserCpu::new();
+        // Captured sequence from the retail reset path:
+        // MOV.W r1, #0x45000000; LDR r0, [r1]; ORR.W r0, r0, #0x10; STR r0, [r1].
+        let code=[0x4F,0xF0,0x8A,0x41,0x08,0x68,0x40,0xF0,0x10,0x00,0x08,0x60];
+        cpu.memory.pram[..code.len()].copy_from_slice(&code);
+        cpu.cpu.r[15]=0;
+        assert_eq!(cpu.run_steps(4),4);
+        assert_eq!(cpu.register(1).unwrap(),0x4500_0000);
+        assert_eq!(cpu.register(0).unwrap(),0x10);
+        assert_eq!(cpu.memory.read_u32(0x4500_0000),0x10);
+        assert!(!cpu.halted());
+    }
+
+    #[test]
     fn rejects_sonix_image_with_reset_vector_outside_user_code() {
         let mut image = vec![0xFFu8; crate::memory::FLASH_SIZE];
         image[..8].copy_from_slice(b"SONIXDEV");
