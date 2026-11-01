@@ -1,7 +1,7 @@
 // Browser worker adapter for the generated wasm-pack package.
 // Copy the CI artifact's pkg/ directory beside this file before enabling it in the site.
 // No firmware bytes or device keys are logged or sent over the network.
-import init, { BrowserCpu, BrowserFirmwareInfo, search_device_key_candidates } from "./pkg/paradise_wasm_core.js";
+import init, { BrowserCapybara, BrowserFirmwareInfo, search_device_key_candidates } from "./pkg/paradise_wasm_core.js";
 
 let ready = false;
 let cpu = null;
@@ -65,37 +65,46 @@ self.onmessage = async (event) => {
       return;
     }
     if (type === "create-cpu") {
-      cpu = new BrowserCpu();
+      cpu = new BrowserCapybara();
       self.postMessage({ id, ok: true, result: { created: true, displayWidth: cpu.display_width(), displayHeight: cpu.display_height() }});
       return;
     }
     if (type === "load-firmware") {
       if (!cpu) throw new Error("Create the CPU before loading firmware.");
-      cpu.load_sonix_firmware(new Uint8Array(payload.bytes), Number(payload.deviceKey) >>> 0);
+      cpu.load_firmware(new Uint8Array(payload.bytes), Number(payload.deviceKey) >>> 0);
       self.postMessage({ id, ok: true, result: {
-        loaded: true, initialSp: cpu.register(13), initialPc: cpu.register(15),
-        instructions: cpu.instructions()
+        loaded: true, initialSp: cpu.sp(), initialPc: cpu.pc(),
+        instructions: cpu.cycles()
       }});
       return;
     }
     if (type === "step") {
       if (!cpu) throw new Error("CPU has not been created.");
-      cpu.step();
-      self.postMessage({ id, ok: true, result: { instructions: cpu.instructions(), pc: cpu.register(15), halted: cpu.halted(), sleeping: cpu.sleeping(), fault: cpu.last_fault(), snapshot: Array.from(cpu.execution_snapshot()), codeWindow: Array.from(cpu.execution_window()) }});
+      const running = cpu.step();
+      self.postMessage({ id, ok: true, result: { executed: 1, instructions: cpu.cycles(), pc: cpu.pc(), halted: cpu.halted(), sleeping: false, fault: cpu.halted() ? "CPU halted" : null, snapshot: Array.from(cpu.execution_snapshot()), codeWindow: Array.from(cpu.execution_window()) }});
       return;
     }
     if (type === "run") {
       if (!cpu) throw new Error("CPU has not been created.");
       const executed = cpu.run_steps(Number(payload.count) || 1);
-      self.postMessage({ id, ok: true, result: { executed, instructions: cpu.instructions(), pc: cpu.register(15), halted: cpu.halted(), sleeping: cpu.sleeping(), fault: cpu.last_fault(), snapshot: Array.from(cpu.execution_snapshot()), codeWindow: Array.from(cpu.execution_window()) }});
+      self.postMessage({ id, ok: true, result: { executed, instructions: cpu.cycles(), pc: cpu.pc(), halted: cpu.halted(), sleeping: false, fault: cpu.halted() ? "CPU halted" : null, snapshot: Array.from(cpu.execution_snapshot()), codeWindow: Array.from(cpu.execution_window()) }});
       return;
     }
         if (type === "run-until-pc") {
       if (!cpu) throw new Error("CPU has not been created.");
-      const result = Array.from(cpu.run_until_pc(Number(payload.address) >>> 0, Number(payload.maxSteps) || 1000000));
+      const target = Number(payload.address) >>> 0;
+      const maxSteps = Number(payload.maxSteps) || 1000000;
+      let executed = 0;
+      let reached = (cpu.pc() >>> 0) === target;
+      while (!reached && !cpu.halted() && executed < maxSteps) {
+        const done = cpu.run_steps(Math.min(50000, maxSteps - executed));
+        executed += done;
+        if (done === 0) break;
+        reached = (cpu.pc() >>> 0) === target;
+      }
       self.postMessage({ id, ok: true, result: {
-        executed: result[0], reached: result[1] === 1, instructions: cpu.instructions(),
-        pc: cpu.register(15), halted: cpu.halted(), sleeping: cpu.sleeping(), fault: cpu.last_fault(),
+        executed, reached, instructions: cpu.cycles(), pc: cpu.pc(),
+        halted: cpu.halted(), sleeping: false, fault: cpu.halted() ? "CPU halted" : null,
         snapshot: Array.from(cpu.execution_snapshot()), codeWindow: Array.from(cpu.execution_window())
       }});
       return;
@@ -114,7 +123,7 @@ self.onmessage = async (event) => {
     }
     if (type === "frame") {
       if (!cpu) throw new Error("CPU has not been created.");
-      self.postMessage({ id, ok: true, result: { width: cpu.display_width(), height: cpu.display_height(), enabled: cpu.display_enabled(), rgba: cpu.display_rgba_framebuffer(), framesReceived: cpu.display_frames_received(), nonzeroPixels: cpu.display_nonzero_pixels(), pixelChecksum: cpu.display_pixel_checksum(), dmaDiagnostics: (typeof cpu.dma_diagnostics === "function" ? cpu.dma_diagnostics() : []), peripheralDiagnostics: (typeof cpu.peripheral_diagnostics === "function" ? cpu.peripheral_diagnostics() : []), peripheralTrace: (typeof cpu.peripheral_trace === "function" ? cpu.peripheral_trace() : []) }});
+      self.postMessage({ id, ok: true, result: { width: cpu.display_width(), height: cpu.display_height(), enabled: cpu.display_enabled(), rgba: cpu.display_rgba(), framesReceived: cpu.display_frames(), nonzeroPixels: cpu.display_nonzero_pixels(), pixelChecksum: cpu.display_pixel_checksum(), dmaDiagnostics: [], peripheralDiagnostics: [], peripheralTrace: [] }});
       return;
     }
     throw new Error("Unknown worker message type: " + String(type));
